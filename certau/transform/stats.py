@@ -27,6 +27,83 @@ class StixStatsTransform(StixTextTransform):
         )
         self._pretty_text = pretty_text
 
+    def _package_stats(self):
+        elements = {
+            'campaigns': set(),
+            'courses_of_action': set(),
+            'exploit_targets': set(),
+            'indicators': set(),
+            'killchains': set(),
+            'observables': set(),
+            'threat_actors': set(),
+            'ttps': set(),
+        }
+
+        def _process_indicator(indicator):
+            """Count all indicators except compositions."""
+            if indicator.composite_indicator_expression:
+                for i in indicator.composite_indicator_expression:
+                    _process_indicator(i)
+            else:
+                if indicator.id_:
+                    elements['indicators'].add(indicator.id_)
+                if len(indicator.observables):
+                    for o in indicator.observables:
+                        _process_observable(o)
+
+        def _process_observable(observable):
+            """Count all observables except compositions."""
+            if observable.observable_composition:
+                for o in observable.observable_composition.observables:
+                    _process_observable(o)
+            else:
+                if observable.id_:
+                    elements['observables'].add(observable)
+
+        for key in elements.keys():
+            if key == 'killchains' and self._package.ttps:
+                list_ = self._package.ttps.kill_chains
+            elif key != 'killchains':
+                list_ = getattr(self._package, key)
+            else:
+                continue
+
+            for v in list_:
+                if key == 'indicators':
+                    _process_indicator(v)
+                elif key == 'observables':
+                    _process_observable(v)
+                else:
+                    if v.id_:
+                        elements[key].add(v.id_)
+
+        return elements
+
+    def text_for_package_stats(self):
+        labels = {
+            'campaigns': 'Campaigns',
+            'courses_of_action': 'Courses of action',
+            'exploit_targets': 'Exploit targets',
+            'indicators': 'Indicators',
+            'killchains': 'Killchains',
+            'observables': 'Observables',
+            'threat_actors': 'Threat actors',
+            'ttps': 'TTPs',
+        }
+        text = ''
+        elements = self._package_stats()
+        for e in sorted(elements.keys()):
+            if len(elements[e]):
+                if self._pretty_text:
+                    text += '{0:<35} {1:>4}\n'.format(
+                        labels[e] + ':',
+                        len(elements[e]),
+                    )
+                else:
+                    text += self.join([labels[e], len(elements[e])]) + '\n'
+        return text
+
+
     def header(self):
         header = self._header_prefix + self.LINE + '\n'
         header += self._header_prefix + 'Summary statistics:'
@@ -40,6 +117,7 @@ class StixStatsTransform(StixTextTransform):
             header += ' (' + tlp + ')'
 
         header += '\n' + self._header_prefix + self.LINE + '\n'
+        header += '\n' + self.text_for_package_stats() + '\n'
         return header
 
     def text_for_object_type(self, object_type):
