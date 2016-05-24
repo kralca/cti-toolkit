@@ -33,7 +33,7 @@ class StixStatsTransform(StixTextTransform):
             'courses_of_action': set(),
             'exploit_targets': set(),
             'indicators': set(),
-            'killchains': set(),
+            'kill_chains': set(),
             'observables': set(),
             'threat_actors': set(),
             'ttps': set(),
@@ -61,12 +61,10 @@ class StixStatsTransform(StixTextTransform):
                     elements['observables'].add(observable)
 
         for key in elements.keys():
-            if key == 'killchains' and self._package.ttps:
-                list_ = self._package.ttps.kill_chains
-            elif key != 'killchains':
-                list_ = getattr(self._package, key)
+            if key == 'kill_chains':
+                list_ = getattr(self._package.ttps, key)
             else:
-                continue
+                list_ = getattr(self._package, key)
 
             for v in list_:
                 if key == 'indicators':
@@ -85,7 +83,7 @@ class StixStatsTransform(StixTextTransform):
             'courses_of_action': 'Courses of action',
             'exploit_targets': 'Exploit targets',
             'indicators': 'Indicators',
-            'killchains': 'Killchains',
+            'kill_chains': 'Kill chains',
             'observables': 'Observables',
             'threat_actors': 'Threat actors',
             'ttps': 'TTPs',
