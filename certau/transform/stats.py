@@ -66,14 +66,16 @@ class StixStatsTransform(StixTextTransform):
             else:
                 list_ = getattr(self._package, key)
 
-            for v in list_:
-                if key == 'indicators':
-                    _process_indicator(v)
-                elif key == 'observables':
-                    _process_observable(v)
-                else:
-                    if v.id_:
-                        elements[key].add(v.id_)
+            self._logger.debug(list_)
+            if list_:
+                for v in list_:
+                    if key == 'indicators':
+                        _process_indicator(v)
+                    elif key == 'observables':
+                        _process_observable(v)
+                    else:
+                        if v.id_:
+                            elements[key].add(v.id_)
 
         return elements
 
