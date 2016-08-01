@@ -272,6 +272,7 @@ def main():
         pass
     else:
         logger.error('Unable to determine transform type from options')
+        return
 
     if options.header:
         transform_kwargs['include_header'] = options.header
