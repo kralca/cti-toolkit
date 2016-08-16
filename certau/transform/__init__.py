@@ -26,3 +26,4 @@ from .stats import StixStatsTransform
 from .csv import StixCsvTransform
 from .brointel import StixBroIntelTransform
 from .misp import StixMispTransform
+from .taxii import StixTaxiiTransform

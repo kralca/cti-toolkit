@@ -11,10 +11,11 @@ from StringIO import StringIO
 import configargparse
 from stix.core import STIXPackage
 
-from certau.source import StixFileSource, SimpleTaxiiClient
+from certau.lib import SimpleTaxiiClient
+from certau.source import StixFileSource, TaxiiSource
 from certau.transform import StixTextTransform, StixStatsTransform
 from certau.transform import StixCsvTransform, StixBroIntelTransform
-from certau.transform import StixMispTransform
+from certau.transform import StixMispTransform, StixTaxiiTransform
 
 
 def get_arg_parser():
@@ -83,9 +84,14 @@ def get_arg_parser():
         help="feed output to a MISP server",
     )
     output_ex_group.add_argument(
-        "-x", "--xml_output",
-        help=("output XML STIX packages to the given directory " +
-              "(use with --taxii)"),
+        "--taxii-output",
+        action="store_true",
+        help="publish STIX packages to a TAXII server inbox",
+    )
+    output_ex_group.add_argument(
+        "--no-transform",
+        action="store_true",
+        help="don't perform any output transform on STIX packages",
     )
     # File source options
     file_group = parser.add_argument_group(
@@ -107,6 +113,10 @@ def get_arg_parser():
     taxii_group.add_argument(
         "--port",
         help="port of TAXII server",
+    )
+    taxii_group.add_argument(
+        "--poll-url",
+        help="URL for polling the TAXII server",
     )
     taxii_group.add_argument(
         "--ca_file",
@@ -154,6 +164,47 @@ def get_arg_parser():
     taxii_group.add_argument(
         "--subscription-id",
         help="a subscription ID for the poll request",
+    )
+    taxii_group.add_argument(
+        "-x", "--xml-output",
+        help=("output XML STIX packages to the given directory " +
+              "(use with --taxii)"),
+    )
+    # TAXII output options
+    taxii_output_group = parser.add_argument_group(
+        title='taxii output arguments (use with --taxii-output)',
+    )
+    taxii_output_group.add_argument(
+        "--taxii-output-url",
+        help="URL for TAXII server inbox to send packages to",
+    )
+    taxii_output_group.add_argument(
+        "--taxii-output-username",
+        help="username for TAXII authentication",
+    )
+    taxii_output_group.add_argument(
+        "--taxii-output-password",
+        help="password for TAXII authentication",
+    )
+    taxii_output_group.add_argument(
+        "--taxii-output-key",
+        help="file containing PEM key for TAXII SSL authentication",
+    )
+    taxii_output_group.add_argument(
+        "--taxii-output-cert",
+        help="file containing PEM certificate for TAXII SSL authentication",
+    )
+    taxii_output_group.add_argument(
+        "--taxii-output-ca-cert",
+        help="file containing CA certificate of TAXII server",
+    )
+    taxii_output_group.add_argument(
+        "--taxii-output-collection",
+        help="TAXII collection to poll",
+    )
+    taxii_output_group.add_argument(
+        "--taxii-output-marking",
+        help="file containing STIX package marking (XML) to add to header",
     )
     other_group = parser.add_argument_group(
         title='other output options',
@@ -216,7 +267,7 @@ def get_arg_parser():
     )
     misp_group.add_argument(
         "--misp-info",
-        #default='Automated STIX ingest',
+        # default='Automated STIX ingest',
         help="MISP event description",
     )
     misp_group.add_argument(
@@ -232,7 +283,9 @@ def _process_package(package, transform_class, transform_kwargs):
     transform = transform_class(package, **transform_kwargs)
     if isinstance(transform, StixTextTransform):
         sys.stdout.write(transform.text())
-    elif isinstance(transform, StixMispTransform):
+
+    elif (isinstance(transform, StixMispTransform) or
+          isinstance(transform, StixTaxiiTransform)):
         transform.publish()
 
 
@@ -252,12 +305,15 @@ def main():
     transform_kwargs = {}
     if options.stats:
         transform_class = StixStatsTransform
+
     elif options.text:
         transform_class = StixCsvTransform
         if options.field_separator:
             transform_kwargs['separator'] = options.field_separator
+
     elif options.bro:
         transform_class = StixBroIntelTransform
+
     elif options.misp:
         transform_class = StixMispTransform
         misp = StixMispTransform.get_misp_object(
@@ -268,8 +324,26 @@ def main():
         transform_kwargs['analysis'] = options.misp_analysis
         transform_kwargs['information'] = options.misp_info
         transform_kwargs['published'] = options.misp_published
-    elif options.xml_output:
+
+    elif options.taxii_output:
+        transform_class = StixTaxiiTransform
+        taxii_client = SimpleTaxiiClient(
+            url=options.taxii_output_url,
+            username=options.taxii_output_username,
+            password=options.taxii_output_password,
+            key_file=options.taxii_output_key,
+            cert_file=options.taxii_output_cert,
+            ca_file=options.taxii_output_ca_cert,
+        )
+        transform_kwargs['taxii_client'] = taxii_client
+        transform_kwargs['collection'] = options.taxii_output_collection
+        if options.taxii_output_marking:
+            marking = Marking.from_xml(options.taxii_output_marking)
+            transform_kwargs['marking'] = marking
+
+    elif options.xml_output or options.no_transform:
         pass
+
     else:
         logger.error('Unable to determine transform type from options')
 
@@ -278,11 +352,11 @@ def main():
 
     if options.taxii:
         logger.info("Processing a TAXII message")
-        source = SimpleTaxiiClient(
-            hostname=options.hostname,
-            path=options.path,
+        source = TaxiiSource(
+            options.hostname,
+            options.path,
+            options.collection,
             port=options.port,
-            collection=options.collection,
             use_ssl=options.ssl,
             username=options.username,
             password=options.password,
@@ -292,25 +366,23 @@ def main():
             begin_ts=options.begin_timestamp,
             end_ts=options.end_timestamp,
             subscription_id=options.subscription_id,
+            poll_url=options.poll_url,
+            output_dir=options.xml_output,
         )
-        source.send_poll_request()
-
-        if options.xml_output:
-            logger.debug("Writing XML to %s", options.xml_output)
-            source.save_content_blocks(options.xml_output)
-            return
-
         logger.info("Processing TAXII content blocks")
+
     else:
         logger.info("Processing file input")
         source = StixFileSource(options.file, options.recurse)
 
-    while True:
-        package = source.next_stix_package()
-        if package:
-            _process_package(package, transform_class, transform_kwargs)
-        else:
-            break
+
+    if not options.no_transform:
+        while True:
+            package = source.next_stix_package()
+            if package:
+                _process_package(package, transform_class, transform_kwargs)
+            else:
+                break
 
 
 if __name__ == '__main__':

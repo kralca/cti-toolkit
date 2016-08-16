@@ -98,6 +98,13 @@ def test_transform_to_stats(package):
         ++++++++++++++++++++++++++++++++++++++++
         Summary statistics: CA-TEST-STIX (WHITE)
         ++++++++++++++++++++++++++++++++++++++++
+
+        Courses of action:                     4
+        Indicators:                            7
+        Kill chains:                           1
+        Observables:                          20
+        TTPs:                                  4
+
         Address observables:                   2
         DomainName observables:                3
         EmailMessage observables:              2
