@@ -36,7 +36,7 @@ setup(
     install_requires=[
         'configargparse',
         'lxml',
-        'libtaxii',
+        'libtaxii>1.1.110',
         'cybox==2.1.0.12',
         'stix==1.1.1.7',
         'stix-ramrod',

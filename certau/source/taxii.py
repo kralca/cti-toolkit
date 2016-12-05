@@ -10,6 +10,7 @@ from libtaxii.messages_11 import generate_message_id
 from libtaxii.clients import HttpClient
 from libtaxii.scripts import TaxiiScript
 
+from certau import __version__
 from .base import StixSource
 
 
@@ -52,6 +53,9 @@ class SimpleTaxiiClient(HttpClient, StixSource):
         self._begin_ts = begin_ts
         self._end_ts = end_ts
         self._subscription_id = subscription_id
+        self._http_user_agent = 'cti-toolkit {} (libtaxii.httpclient)'.format(
+            __version__,
+        )
 
         self.set_use_https(use_ssl)
         if ca_file:
@@ -143,11 +147,12 @@ class SimpleTaxiiClient(HttpClient, StixSource):
             self._collection)
 
         http_response = self.call_taxii_service2(
-            self._hostname,
-            self._path,
-            VID_TAXII_XML_11,
-            poll_request1.to_xml(),
-            self._port,
+            host=self._hostname,
+            path=self._path,
+            message_binding=VID_TAXII_XML_11,
+            post_data=poll_request1.to_xml(),
+            port=self._port,
+            user_agent=self._http_user_agent,
         )
         self._logger.debug("TAXII response received")
         self._logger.debug("HTTP response %s",

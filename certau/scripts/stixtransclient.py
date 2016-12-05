@@ -6,10 +6,10 @@ the STIX package(s), or a STIX package file can be supplied.
 
 import sys
 import logging
-import pkg_resources
 
 import configargparse
 
+from certau import __version__
 from certau.source import StixFileSource, SimpleTaxiiClient
 from certau.transform import StixTextTransform, StixStatsTransform
 from certau.transform import StixCsvTransform, StixBroIntelTransform
@@ -41,11 +41,10 @@ def get_arg_parser():
         action="store_true",
         help="enable debug output",
     )
-    version = pkg_resources.require('cti-toolkit')[0].version
     global_group.add_argument(
         "-V", "--version",
         action="version",
-        version="cti-toolkit {} by CERT Australia".format(version),
+        version="cti-toolkit {} by CERT Australia".format(__version__),
     )
     # Source options
     source_group = parser.add_argument_group('input (source) options')
