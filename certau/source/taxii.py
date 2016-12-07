@@ -139,8 +139,8 @@ class SimpleTaxiiClient(HttpClient, StixSource):
         """Send the poll request to the TAXII server."""
         poll_request1 = self.create_poll_request()
         self._logger.debug(
-            "Request generated: using collection name - %s",
-            self._collection)
+            "Request generated: using host,path,port,collection - %s,%s,%s,%s",
+            self._hostname, self._path, self._port, self._collection)
 
         http_response = self.call_taxii_service2(
             self._hostname,
@@ -160,6 +160,10 @@ class SimpleTaxiiClient(HttpClient, StixSource):
 
         if self._poll_response.message_type != MSG_POLL_RESPONSE:
             raise Exception('TAXII response not a poll response as expected.')
+
+    def get_poll_response_end_timestamp(self):
+        end_timestamp = self._poll_response.inclusive_end_timestamp_label
+        return end_timestamp.isoformat() if end_timestamp else None
 
     def save_content_blocks(self, directory):
         """Save poll response content blocks to given directory."""
