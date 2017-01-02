@@ -103,7 +103,6 @@ class StixStatsTransform(StixTextTransform):
                     text += self.join([labels[e], len(elements[e])]) + '\n'
         return text
 
-
     def header(self):
         header = self._header_prefix + self.LINE + '\n'
         header += self._header_prefix + 'Summary statistics:'

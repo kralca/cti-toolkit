@@ -18,7 +18,7 @@ There are two broad types of transform currently supported:
      * :py:class:`StixMispTransform` - publish indicators to a MISP instance
 """
 
-__all__ = ['base', 'text', 'stats', 'csv', 'brointel', 'misp']
+__all__ = ['base', 'text', 'stats', 'csv', 'brointel', 'misp', 'elasticsearch']
 
 from .base import StixTransform
 from .text import StixTextTransform
@@ -26,3 +26,4 @@ from .stats import StixStatsTransform
 from .csv import StixCsvTransform
 from .brointel import StixBroIntelTransform
 from .misp import StixMispTransform
+from .elasticsearch import StixElasticsearchTransform

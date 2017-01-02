@@ -65,9 +65,47 @@ class StixTransform(object):
     OBJECT_CONSTRAINTS = dict()
     STRING_CONDITION_CONSTRAINT = list()
 
+    PACKAGE_FIELDS = [
+        'campaigns',
+        'courses_of_action',
+        'exploit_targets',
+        'incidents',
+        'indicators',
+        'kill_chain_phases',
+        'observables',
+        'threat_actors',
+        'ttps',
+        'related_packages',
+    ]
+
+    INDICATOR_FIELD_MAPPING = {
+        'indicated_ttps': 'ttps',
+        'suggested_coas': 'courses_of_action',
+        'related_indicators': 'indicators',
+        'observables': 'observables',
+    }
+
     def __init__(self, package):
-        self._package = package
-        self._observables = self._observables_for_package(package)
+        if isinstance(package, list):
+            self._packages = package
+        else:
+            self._packages = [ package ]
+
+        # Intialise the package parts
+        self._package_parts = dict()
+        for field in self.PACKAGE_FIELDS:
+            self._package_parts[field] = dict()
+
+        self._observables = dict()
+        self._observable_ids = []
+        for package in self._packages:
+            self._process_package(package)
+            self._add_observables_for_package(package)
+
+        # debug
+        # for field in self.PACKAGE_FIELDS:
+        #     print field,
+        #     print self._package_parts[field].keys()
 
         # Initialise the logger
         self._logger = logging.getLogger()
@@ -75,24 +113,27 @@ class StixTransform(object):
 
     # ##### Helpers for extracting various STIX package elements. #####
 
-    def package_title(self, default=''):
+    @staticmethod
+    def package_title(package, default=''):
         """Retrieves the STIX package title (str) from the header."""
-        if self._package.stix_header and self._package.stix_header.title:
-            return self._package.stix_header.title.encode('utf-8')
+        if package.stix_header and package.stix_header.title:
+            return package.stix_header.title.encode('utf-8')
         else:
             return default
 
-    def package_description(self, default=''):
+    @staticmethod
+    def package_description(package, default=''):
         """Retrieves the STIX package description (str) from the header."""
-        if self._package.stix_header and self._package.stix_header.description:
-            return self._package.stix_header.description.value.encode('utf-8')
+        if package.stix_header and package.stix_header.description:
+            return package.stix_header.description.value.encode('utf-8')
         else:
             return default
 
-    def package_tlp(self, default='AMBER'):
+    @staticmethod
+    def package_tlp(package, default='AMBER'):
         """Retrieves the STIX package TLP (str) from the header."""
-        if self._package.stix_header:
-            handling = self._package.stix_header.handling
+        if package.stix_header:
+            handling = package.stix_header.handling
             if handling and handling.markings:
                 for marking_spec in handling.markings:
                     for marking_struct in marking_spec.marking_structures:
@@ -101,6 +142,76 @@ class StixTransform(object):
         return default
 
     # ### Internal methods for processing observables, objects and properties.
+
+    def _process_package(self, package):
+        for field in self.PACKAGE_FIELDS:
+            values = getattr(package, field, None)
+            if values is not None:
+                for value in values:
+                    id_ = getattr(value, 'id_', None)
+                    if id_ is not None:
+                        self._package_parts[field][id_] = value
+            if field == 'ttps':
+                kill_chains = getattr(values, 'kill_chains', None)
+                if kill_chains is not None:
+                    self._process_kill_chains(kill_chains)
+
+    def _process_kill_chains(self, kill_chains):
+        for kill_chain in kill_chains:
+            for phase in kill_chain.kill_chain_phases:
+                phase_id = getattr(phase, 'phase_id', None)
+                if phase_id is not None:
+                    self._package_parts['kill_chain_phases'][phase_id] = phase
+
+    def _reconstruct_indicators(self):
+        for id_, indicator in self._package_parts['indicators'].iteritems():
+            if indicator.composite_indicator_expression is not None:
+                logging.warning('composite indicator expression ignored '
+                                '(%s)' % id_)
+                continue
+
+            self._reconstruct_indicator(indicator)
+
+    def _reconstruct_indicator(self, indicator):
+        for field, mapped in self.INDICATOR_FIELD_MAPPING.iteritems():
+            values = getattr(indicator, field, None)
+            if values is not None:
+                new_values = []
+                for value in values:
+                    if field == 'indicated_ttps':
+                        value = getattr(value, 'item')
+                    idref = getattr(value, 'idref', None)
+                    if idref is not None:
+                        full = self._package_parts[mapped].get(idref)
+                        if field == 'observables':
+                            self._reconstruct_observable(full)
+                        if full is not None:
+                            new_values.append(full)
+                        else:
+                            new_values.append(value)
+                    else:
+                        new_values.append(value)
+                setattr(indicator, field, new_values)
+
+    def _reconstruct_observable(self, observable):
+        composition = getattr(observable, 'observable_composition', None)
+        if composition is not None:
+            observables = getattr(composition, 'observables', None)
+            if observables is not None:
+                new_values = []
+                for observable in observables:
+                    idref = getattr(observable, 'idref', None)
+                    if idref is not None:
+                        full = self._package_parts['observables'].get(idref)
+                        if full is not None:
+                            new_values.append(full)
+                        else:
+                            new_values.append(observable)
+                    else:
+                        new_values.append(observable)
+                setattr(composition, 'observables', new_values)
+
+
 
     @staticmethod
     def _observable_properties(observable):
@@ -142,8 +253,7 @@ class StixTransform(object):
         """Dictionary key used for storing the string condition of a field."""
         return field + '_condition'
 
-    @classmethod
-    def _observables_for_package(cls, package):
+    def _add_observables_for_package(self, package):
         """Extract observables from a STIX package.
 
         Collects observables from a STIX package and groups them by object
@@ -182,41 +292,38 @@ class StixTransform(object):
                         observable.observable_composition.observables
                     )
                 else:
-                    object_type = cls._observable_object_type(observable)
+                    object_type = self._observable_object_type(observable)
                     if (observable.id_ is not None and
-                            observable.id_ not in observable_ids and
+                            observable.id_ not in self._observable_ids and
                             object_type is not None):
-                        object_type = cls._observable_object_type(observable)
-                        if object_type in cls.OBJECT_FIELDS.keys():
-                            fields = cls._field_values_for_observable(
+                        object_type = self._observable_object_type(observable)
+                        if object_type in self.OBJECT_FIELDS.keys():
+                            fields = self._field_values_for_observable(
                                 observable
                             )
                             if not fields:
                                 continue
-                        elif not cls.OBJECT_FIELDS:
+                        elif not self.OBJECT_FIELDS:
                             fields = None
                         else:
                             continue
-                        if object_type not in observables:
-                            observables[object_type] = []
+                        if object_type not in self._observables:
+                            self._observables[object_type] = []
                         new_observable = dict(
                             id=observable.id_,
                             observable=observable,
                             fields=fields,
                         )
-                        observables[object_type].append(new_observable)
-                        observable_ids.append(observable.id_)
+                        self._observables[object_type].append(new_observable)
+                        self._observable_ids.append(observable.id_)
 
         # Look for observables in the package root and in indicators
-        observable_ids = []
-        observables = dict()
         if package.observables:
             _add_observables(package.observables)
         if package.indicators:
             for i in package.indicators:
                 if i.observables:
                     _add_observables(i.observables)
-        return observables
 
     @classmethod
     def _field_values_for_observable(cls, observable):

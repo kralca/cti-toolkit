@@ -14,7 +14,7 @@ from stix.core import STIXPackage
 from certau.source import StixFileSource, SimpleTaxiiClient
 from certau.transform import StixTextTransform, StixStatsTransform
 from certau.transform import StixCsvTransform, StixBroIntelTransform
-from certau.transform import StixMispTransform
+from certau.transform import StixMispTransform, StixElasticsearchTransform
 
 
 def get_arg_parser():
@@ -41,6 +41,11 @@ def get_arg_parser():
         "-d", "--debug",
         action="store_true",
         help="enable debug output",
+    )
+    global_group.add_argument(
+        "--aggregate",
+        action="store_true",
+        help="aggregate STIX packages in transform",
     )
     # Source options
     source_group = parser.add_argument_group('input (source) options')
@@ -86,6 +91,11 @@ def get_arg_parser():
         "-x", "--xml_output",
         help=("output XML STIX packages to the given directory " +
               "(use with --taxii)"),
+    )
+    output_ex_group.add_argument(
+        "-e", "--elasticsearch",
+        action="store_true",
+        help=("send indicators to an elasticsearch instance")
     )
     # File source options
     file_group = parser.add_argument_group(
@@ -232,7 +242,7 @@ def _process_package(package, transform_class, transform_kwargs):
     transform = transform_class(package, **transform_kwargs)
     if isinstance(transform, StixTextTransform):
         sys.stdout.write(transform.text())
-    elif isinstance(transform, StixMispTransform):
+    elif isinstance(transform, StixMispTransform) or isinstance(transform, StixElasticsearchTransform):
         transform.publish()
 
 
@@ -270,6 +280,9 @@ def main():
         transform_kwargs['published'] = options.misp_published
     elif options.xml_output:
         pass
+    elif options.elasticsearch:
+        transform_class = StixElasticsearchTransform
+        transform_kwargs['elasticsearch'] = 'blahblahblah'
     else:
         logger.error('Unable to determine transform type from options')
 
@@ -305,12 +318,16 @@ def main():
         logger.info("Processing file input")
         source = StixFileSource(options.file, options.recurse)
 
-    while True:
-        package = source.next_stix_package()
-        if package:
-            _process_package(package, transform_class, transform_kwargs)
-        else:
-            break
+    if options.aggregate:
+        packages = source.all_packages()
+        _process_package(packages, transform_class, transform_kwargs)
+    else:
+        while True:
+            package = source.next_stix_package()
+            if package:
+                _process_package(package, transform_class, transform_kwargs)
+            else:
+                break
 
 
 if __name__ == '__main__':

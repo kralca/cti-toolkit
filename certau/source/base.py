@@ -25,3 +25,11 @@ class StixSource(object):
     def next_stix_package(self):
         """Return the next STIX package available from the source (or None)."""
         raise NotImplementedError
+
+    def all_packages(self):
+        packages = []
+        next_package = self.next_stix_package()
+        while next_package is not None:
+            packages.append(next_package)
+            next_package = self.next_stix_package()
+        return packages
