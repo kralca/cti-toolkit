@@ -1,7 +1,7 @@
-from .text import StixTextTransform
+from certau.transform import TextTransform
 
 
-class StixCsvTransform(StixTextTransform):
+class CsvTransform(TextTransform):
     """Generate a CSV formatted summary of observables from a STIX package.
 
     This class can be used to generate a delimited text dump of the
@@ -76,11 +76,14 @@ class StixCsvTransform(StixTextTransform):
         'WinRegistryKey': ['hive', 'key', 'values.name', 'values.data'],
     }
 
-    def __init__(self, package, separator='|', include_header=True,
+    def __init__(self, output, separator='|', include_header=True,
                  header_prefix='#', include_observable_id=True,
                  include_condition=True):
-        super(StixCsvTransform, self).__init__(
-            package, separator, include_header, header_prefix,
+        super(CsvTransform, self).__init__(
+                output=output,
+                separator=separator,
+                include_header=include_header,
+                header_prefix=header_prefix,
         )
         self._include_observable_id = include_observable_id
         self._include_condition = include_condition
@@ -92,21 +95,6 @@ class StixCsvTransform(StixTextTransform):
             return True
         else:
             return False
-
-    def header(self):
-        title = self.package_title(default=self._package.id_)
-        tlp = self.package_tlp()
-
-        if title or tlp:
-            header = self._header_prefix
-            if title:
-                header += ' {}'.format(title)
-            if tlp:
-                header += ' (TLP:{})'.format(tlp)
-            header += '\n\n'
-        else:
-            header = ''
-        return header
 
     def header_for_object_type(self, object_type):
         header_values = ['id'] if self._include_observable_id else []
@@ -138,10 +126,11 @@ class StixCsvTransform(StixTextTransform):
 
     def text_for_object_type(self, object_type):
         text = ''
-        if object_type in self._observables:
-            for observable in self._observables[object_type]:
-                id_ = observable['id']
-                for field in observable['fields']:
+        if object_type in self.observables_by_type:
+            for observable in self.observables_by_type[object_type]:
+                id_ = observable.id_
+                fields = self._field_values_for_observable(observable)
+                for field in fields:
                     if self._include_observable_id:
                         text += '{}{}'.format(id_, self._separator)
                     text += self.text_for_fields(field, object_type) + '\n'

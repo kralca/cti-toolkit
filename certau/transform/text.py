@@ -2,12 +2,13 @@ from __future__ import absolute_import
 
 import contextlib
 import csv
+import sys
 import StringIO
 
-from .base import StixTransform
+from certau.transform import StixTransform
 
 
-class StixTextTransform(StixTransform):
+class TextTransform(StixTransform):
     """A transform for converting a STIX package to simple text.
 
     This class and its subclasses implement the :py:func:`text` class method
@@ -38,9 +39,10 @@ class StixTextTransform(StixTransform):
     HEADER_LABELS = []
     OBJECT_HEADER_LABELS = {}
 
-    def __init__(self, package, separator='|',
-                 include_header=True, header_prefix='#'):
-        super(StixTextTransform, self).__init__(package)
+    def __init__(self, output, separator='|', include_header=True,
+                 header_prefix='#'):
+        super(TextTransform, self).__init__()
+        self._output = output
         self._separator = separator
         self._include_header = include_header
         self._header_prefix = header_prefix
@@ -53,13 +55,19 @@ class StixTextTransform(StixTransform):
 
     def header(self):
         """Returns a header string to display with transform."""
+        if self.source:
+            header = '{} {}\n'.format(
+                self._header_prefix,
+                self.source.description,
+            )
+        else:
+            header = ''
         if self.HEADER_LABELS:
-            return '{} {}\n'.format(
+            header += '{} {}\n'.format(
                 self._header_prefix,
                 self.join(self.HEADER_LABELS),
             )
-        else:
-            return ''
+        return header
 
     def header_for_object_type(self, object_type):
         """Returns a header string associated with an object type."""
@@ -83,15 +91,15 @@ class StixTextTransform(StixTransform):
     def text_for_observable(self, observable, object_type):
         """Returns a string representing the given observable."""
         text = ''
-        for field in observable['fields']:
+        for field in self._field_values_for_observable(observable):
             text += self.text_for_fields(field, object_type) + '\n'
         return text
 
     def text_for_object_type(self, object_type):
         """Returns a string representing observables of the given type."""
         text = ''
-        if object_type in self._observables:
-            for observable in self._observables[object_type]:
+        if object_type in self.observables_by_type:
+            for observable in self.observables_by_type[object_type]:
                 text += self.text_for_observable(observable, object_type)
         return text
 
@@ -102,7 +110,7 @@ class StixTextTransform(StixTransform):
         if self.OBJECT_FIELDS:
             object_types = self.OBJECT_FIELDS.keys()
         else:
-            object_types = self._observables.keys()
+            object_types = self.observables_by_type.keys()
         for object_type in sorted(object_types):
             object_text = self.text_for_object_type(object_type)
             if object_text:
@@ -110,3 +118,7 @@ class StixTextTransform(StixTransform):
                     text += self.header_for_object_type(object_type)
                 text += object_text
         return text
+
+    def do_transform(self):
+        self.process_observables()
+        self._output.write(self.text())

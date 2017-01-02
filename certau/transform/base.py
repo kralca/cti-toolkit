@@ -5,7 +5,6 @@ import copy
 from cybox import EntityList
 from cybox.core import Object
 from cybox.common import ObjectProperties
-from stix.extensions.marking.tlp import TLPMarkingStructure
 
 
 class StixTransform(object):
@@ -65,40 +64,138 @@ class StixTransform(object):
     OBJECT_CONSTRAINTS = dict()
     STRING_CONDITION_CONSTRAINT = list()
 
-    def __init__(self, package):
-        self._package = package
-        self._observables = self._observables_for_package(package)
+    PACKAGE_ELEMENTS = [
+        'campaigns',
+        'courses_of_action',
+        'exploit_targets',
+        'incidents',
+        'indicators',
+        'kill_chains',
+        'observables',
+        'threat_actors',
+        'ttps',
+    ]
 
-        # Initialise the logger
+    INDICATOR_ELEMENT_MAPPING = {
+        'indicated_ttps': 'ttps',
+        'suggested_coas': 'courses_of_action',
+        'related_indicators': 'indicators',
+        'observables': 'observables',
+    }
+
+    def __init__(self):
         self._logger = logging.getLogger()
         self._logger.debug('%s object created', self.__class__.__name__)
+        self.source = None
+        self.reset()
 
-    # ##### Helpers for extracting various STIX package elements. #####
+    def reset(self):
+        self.packages = dict()    # package id -> package
+        self.elements = dict()    # element id -> element
+        self.containers = dict()  # element id -> package
+        self.observables_by_type = dict()  # object type -> observable list
 
-    def package_title(self, default=''):
-        """Retrieves the STIX package title (str) from the header."""
-        if self._package.stix_header and self._package.stix_header.title:
-            return self._package.stix_header.title.encode('utf-8')
+    def add_package(self, source_package):
+        """Process a STIX package."""
+        package = source_package.package
+        self.packages[package.id_] = package
+        for element in self.PACKAGE_ELEMENTS:
+            values = getattr(package, element, None)
+            if values is not None:
+                for value in values:
+                    id_ = getattr(value, 'id_', None)
+                    if id_ is not None:
+                        if element not in self.elements:
+                            self.elements[element] = dict()
+                        self.elements[element][id_] = value
+                        self.containers[id_] = package
+            if element == 'ttps':
+                kill_chains = getattr(values, 'kill_chains', None)
+                if kill_chains is not None:
+                    for kill_chain in kill_chains:
+                        id_ = getattr(kill_chain, 'id_', None)
+                        if id_ is not None:
+                            if 'kill_chains' not in self.elements:
+                                self.elements['kill_chains'] = dict()
+                            self.elements['kill_chains'][id_] = kill_chain
+                            self.containers[id_] = package
+
+    def do_transform(self):
+        raise NotImplementedError
+
+    def process_source(self, source, aggregate=False):
+        self.source = source
+        packages = source.all_packages()
+        if aggregate:
+            self.reset()
+            for package in packages:
+                self.add_package(package)
+            self.do_transform()
         else:
-            return default
+            for package in packages:
+                self.reset()
+                self.add_package(package)
+                self.do_transform()
 
-    def package_description(self, default=''):
-        """Retrieves the STIX package description (str) from the header."""
-        if self._package.stix_header and self._package.stix_header.description:
-            return self._package.stix_header.description.value.encode('utf-8')
+    def process_indicators(self):
+        for id_, indicator in self.elements['indicators'].iteritems():
+            self.process_indicator(indicator)
+
+    def process_indicator(self, indicator):
+        # Default behaviour is to process observables only
+        observables = self.dereference_indicator_element(
+            indicator=indicator,
+            element='observables',
+        )
+        self.process_observables(observables)
+
+    def process_observables(self, observables=None):
+        if observables is None:
+            observables = [x for key, x in self.elements['observables'].iteritems()]
+        for observable in observables:
+            object_type = self._observable_object_type(observable)
+            if object_type not in self.observables_by_type:
+                self.observables_by_type[object_type] = list()
+            self.observables_by_type[object_type].append(observable)
+
+    def dereference_indicator_element(self, indicator, element):
+        values = getattr(indicator, element, None)
+        self._logger.error('values = %s', values)
+        if values is not None:
+            mapped_to = self.INDICATOR_ELEMENT_MAPPING[element]
+            sub_element = 'item' if element == 'indicated_ttps' else None
+            return self.dereference(values, mapped_to, sub_element)
         else:
-            return default
+            return []
 
-    def package_tlp(self, default='AMBER'):
-        """Retrieves the STIX package TLP (str) from the header."""
-        if self._package.stix_header:
-            handling = self._package.stix_header.handling
-            if handling and handling.markings:
-                for marking_spec in handling.markings:
-                    for marking_struct in marking_spec.marking_structures:
-                        if isinstance(marking_struct, TLPMarkingStructure):
-                            return marking_struct.color
-        return default
+    def dereference(self, values, mapped_to, sub_element=None):
+        new_values = []
+        for value in values:
+            if sub_element is not None:
+                value = getattr(value, sub_element)
+
+            # Does this element need to be dereferenced
+            idref = getattr(value, 'idref', None)
+            if idref is not None:
+                new_value = self.elements[mapped_to].get(idref)
+                if new_value is None:
+                    self._logger.warning("unable to dereference '%s' "
+                                         "element with id '%s'",
+                                         element, idref)
+            # No need to dereference
+            else:
+                new_value = value
+
+            # Handle observable composition
+            composition = getattr(new_value, 'observable_composition', None)
+            if mapped_to == 'observables' and composition is not None:
+                observables = getattr(composition, 'observables')
+                new_observables = self.dereference(observables, mapped_to)
+                new_values.extend(new_observables)
+            elif new_value is not None:
+                new_values.append(new_value)
+
+        return new_values
 
     # ### Internal methods for processing observables, objects and properties.
 
@@ -119,8 +216,8 @@ class StixTransform(object):
         else:
             return None
 
-    @staticmethod
-    def _observable_object_type(observable):
+    @classmethod
+    def _observable_object_type(cls, observable):
         """Determine the object type of an observable's object.
 
         Observable object's properties are Cybox object types which extend
@@ -134,7 +231,7 @@ class StixTransform(object):
             str: a string representation of the observable's object properties
                 type, or None if observable contains no properties.
         """
-        properties = StixTransform._observable_properties(observable)
+        properties = cls._observable_properties(observable)
         return properties.__class__.__name__ if properties else None
 
     @staticmethod
@@ -143,85 +240,12 @@ class StixTransform(object):
         return field + '_condition'
 
     @classmethod
-    def _observables_for_package(cls, package):
-        """Extract observables from a STIX package.
-
-        Collects observables from a STIX package and groups them by object
-        type. Only observables with an ID and containing a Cybox object are
-        returned. Results are returned in a dictionary keyed by object
-        type - see :py:func:`_observable_object_type`.
-
-        If OBJECT_FIELDS are specified only observables containing the
-        object types listed will be returned, and only those with at
-        least one of the listed fields containing a non-trivial value.
-        OBJECT_CONSTRAINTS and STRING_CONDITION_CONSTRAINT are also applied.
-
-        If no OBJECT_FIELDS are specified no constraints are applied and all
-        identified observables are returned.
-
-        Observables are sought from the following locations:
-
-            - the root of the STIX package
-            - within Indicator objects (where the indicators are in the package
-              root)
-            - within ObservableComposition objects found in either of the two
-              previous locations
-
-        Args:
-            package: a :py:class:`stix:STIXPackage` object
-
-        Returns:
-            dict: a dictionary of valid observables, keyed by object type
-                (See description above). May be empty.
-        """
-
-        def _add_observables(new_observables):
-            for observable in new_observables:
-                if observable.observable_composition is not None:
-                    _add_observables(
-                        observable.observable_composition.observables
-                    )
-                else:
-                    object_type = cls._observable_object_type(observable)
-                    if (observable.id_ is not None and
-                            observable.id_ not in observable_ids and
-                            object_type is not None):
-                        object_type = cls._observable_object_type(observable)
-                        if object_type in cls.OBJECT_FIELDS.keys():
-                            fields = cls._field_values_for_observable(
-                                observable
-                            )
-                            if not fields:
-                                continue
-                        elif not cls.OBJECT_FIELDS:
-                            fields = None
-                        else:
-                            continue
-                        if object_type not in observables:
-                            observables[object_type] = []
-                        new_observable = dict(
-                            id=observable.id_,
-                            observable=observable,
-                            fields=fields,
-                        )
-                        observables[object_type].append(new_observable)
-                        observable_ids.append(observable.id_)
-
-        # Look for observables in the package root and in indicators
-        observable_ids = []
-        observables = dict()
-        if package.observables:
-            _add_observables(package.observables)
-        if package.indicators:
-            for i in package.indicators:
-                if i.observables:
-                    _add_observables(i.observables)
-        return observables
-
-    @classmethod
     def _field_values_for_observable(cls, observable):
         """Collects property field values for an observable."""
         object_type = cls._observable_object_type(observable)
+        if object_type not in cls.OBJECT_FIELDS:
+            return []
+
         fields = list(cls.OBJECT_FIELDS[object_type])
 
         # Add any fields required for constraint checking

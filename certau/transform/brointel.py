@@ -3,10 +3,10 @@ import re
 from cybox.objects.address_object import Address
 from cybox.objects.uri_object import URI
 
-from .text import StixTextTransform
+from certau.transform import TextTransform
 
 
-class StixBroIntelTransform(StixTextTransform):
+class BroIntelTransform(TextTransform):
     """Generate observable details for the Bro Intelligence Framework.
 
     This class can be used to generate a list of indicators (observables)
@@ -85,36 +85,37 @@ class StixBroIntelTransform(StixTextTransform):
         },
     }
 
-    def __init__(self, package, separator='\t',
-                 include_header=False, header_prefix='#',
-                 source='UNKNOWN', url='', do_notice='T'):
-        super(StixBroIntelTransform, self).__init__(
-            package, separator, include_header, header_prefix,
+    def __init__(self, output, separator='\t', include_header=False,
+                 header_prefix='#', source='UNKNOWN', url='', do_notice='T'):
+        super(BroIntelTransform, self).__init__(
+                output=output,
+                separator=separator,
+                include_header=include_header,
+                header_prefix=header_prefix,
         )
         self._source = source
         self._url = url
         self._do_notice = do_notice
-        # Make URIs suitable for the Bro format (remove protocol)
-        self._fix_uris()
 
     def _fix_uris(self):
-        if 'URI' in self._observables:
-            for observable in self._observables['URI']:
-                if 'fields' in observable:
-                    for field in observable['fields']:
-                        if 'value' in field:
-                            field['value'] = re.sub(
-                                pattern=r'^(https?|ftp)://',
-                                repl='',
-                                string=field['value'],
-                            )
+        # Make URIs suitable for the Bro format (remove protocol)
+        if 'URI' in self.observables_by_type:
+            for observable in self.observables_by_type['URI']:
+                fields = self._field_values_for_observable(observable)
+                for field in fields:
+                    if 'value' in field:
+                        field['value'] = re.sub(
+                            pattern=r'^(https?|ftp)://',
+                            repl='',
+                            string=field['value'],
+                        )
 
     def text_for_object_type(self, object_type):
         text = ''
-        if object_type in self._observables:
-            for observable in self._observables[object_type]:
+        if object_type in self.observables_by_type:
+            for observable in self.observables_by_type[object_type]:
                 # Look up source and url from observable ID
-                id_prefix = observable['id'].split(':')[0]
+                id_prefix = observable.id_.split(':')[0]
                 if id_prefix in self.BIF_SOURCE_MAPPING:
                     source = self.BIF_SOURCE_MAPPING[id_prefix]['source']
                     url = self.BIF_SOURCE_MAPPING[id_prefix]['url']
@@ -123,7 +124,8 @@ class StixBroIntelTransform(StixTextTransform):
                     url = self._url
 
                 bif_type = self.BIF_TYPE_MAPPING[object_type]
-                for fields in observable['fields']:
+                o_fields = self._field_values_for_observable(observable)
+                for fields in o_fields:
                     for field in self.OBJECT_FIELDS[object_type]:
                         if field in fields:
                             field_values = [
@@ -137,3 +139,7 @@ class StixBroIntelTransform(StixTextTransform):
                             ]
                             text += self.join(field_values) + '\n'
         return text
+
+    def do_transform(self):
+        self._fix_uris()
+        super(BroIntelTransform, self).do_transform()

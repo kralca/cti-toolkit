@@ -7,16 +7,18 @@ import textwrap
 import certau.transform
 
 
-def test_transform_to_text(package):
+def test_transform_to_text(source):
     """Test of transform between a sample STIX file and the 'text' output
     format.
     """
     # Select 'text' output format transformer
-    transformer = certau.transform.StixCsvTransform(
-        package, include_header=True
+    output = StringIO.StringIO()
+    transformer = certau.transform.CsvTransform(
+        output, include_header=True
     )
+    transformer.process_source(source)
 
-    assert transformer.text().strip() == textwrap.dedent("""
+    assert output.getvalue().strip() == textwrap.dedent("""
         # CA-TEST-STIX (TLP:WHITE)
 
         # Address observables
@@ -70,11 +72,12 @@ def test_transform_to_text(package):
     """).strip()
 
 
-def test_text_delimiter_quoting(package):
+def test_text_delimiter_quoting(source):
     """Test that delimiters included in the values of text transforms are
     correctly quoted.
     """
-    transformer = certau.transform.StixCsvTransform(package)
+    output = StringIO.StringIO()
+    transformer = certau.transform.CsvTransform(output)
 
     joined = transformer.join(('first|second', 'third'))
     assert joined == '"first|second"|third'
@@ -85,19 +88,28 @@ def test_text_delimiter_quoting(package):
     assert reader.next() == ['first|second', 'third']
 
 
-def test_transform_to_stats(package):
+def test_transform_to_stats(source):
     """Test of transform between a sample STIX file and the 'stats'
     output format.
     """
     # Select 'stats' output format.
-    transformer = certau.transform.StixStatsTransform(
-        package, include_header=True
+    output = StringIO.StringIO()
+    transformer = certau.transform.StatsTransform(
+        output, include_header=True
     )
+    transformer.process_source(source)
 
-    assert transformer.text().strip() == textwrap.dedent("""
+    assert output.getvalue().strip() == textwrap.dedent("""
         ++++++++++++++++++++++++++++++++++++++++
         Summary statistics: CA-TEST-STIX (WHITE)
         ++++++++++++++++++++++++++++++++++++++++
+
+        Courses of action:                     4
+        Indicators:                            7
+        Kill chains:                           1
+        Observables:                          20
+        TTPs:                                  4
+
         Address observables:                   2
         DomainName observables:                3
         EmailMessage observables:              2
@@ -110,16 +122,18 @@ def test_transform_to_stats(package):
     """).strip()
 
 
-def test_transform_to_bro(package):
+def test_transform_to_bro(source):
     """Test of transform between a sample STIX file and the 'bro' output
     format.
     """
     # Select 'stats' output format.
-    transformer = certau.transform.StixBroIntelTransform(
-        package, include_header=True
+    output = StringIO.StringIO()
+    transformer = certau.transform.BroIntelTransform(
+        output, include_header=True
     )
+    transformer.process_source(source)
 
-    assert transformer.text().strip().expandtabs() == textwrap.dedent("""
+    assert output.getvalue().strip().expandtabs() == textwrap.dedent("""
         # indicator\tindicator_type\tmeta.source\tmeta.url\tmeta.do_notice\tmeta.if_in\tmeta.whitelist
         158.164.39.51\tIntel::ADDR\tCERT-AU\thttps://www.cert.gov.au/\tT\t-\t-
         111.222.33.44\tIntel::ADDR\tCERT-AU\thttps://www.cert.gov.au/\tT\t-\t-
@@ -140,11 +154,13 @@ def test_transform_to_bro(package):
     """).strip().expandtabs()
 
     # Select 'bro' output format and test no notice option.
-    transformer = certau.transform.StixBroIntelTransform(
-        package, do_notice='F'
+    output = StringIO.StringIO()
+    transformer = certau.transform.BroIntelTransform(
+        output, do_notice='F'
     )
+    transformer.process_source(source)
 
-    assert transformer.text().strip().expandtabs() == textwrap.dedent("""
+    assert output.getvalue().strip().expandtabs() == textwrap.dedent("""
         158.164.39.51\tIntel::ADDR\tCERT-AU\thttps://www.cert.gov.au/\tF\t-\t-
         111.222.33.44\tIntel::ADDR\tCERT-AU\thttps://www.cert.gov.au/\tF\t-\t-
         bad.domain.org\tIntel::DOMAIN\tCERT-AU\thttps://www.cert.gov.au/\tF\t-\t-
@@ -163,16 +179,18 @@ def test_transform_to_bro(package):
         host.domain.tld/path/file\tIntel::URL\tCERT-AU\thttps://www.cert.gov.au/\tF\t-\t-
     """).strip().expandtabs()
 
-def test_transform_to_snort(package):
+def test_transform_to_snort(source):
     """Test of transform between a sample STIX file and the 'snort' output
     format.
     """
     # Select 'stats' output format.
-    transformer = certau.transform.StixSnortTransform(
-            package, include_header=False
+    output = StringIO.StringIO()
+    transformer = certau.transform.SnortTransform(
+            output, include_header=False
     )
+    transformer.process_source(source)
 
-    assert transformer.text().strip().expandtabs() == textwrap.dedent("""
+    assert output.getvalue().strip().expandtabs() == textwrap.dedent("""
         alert ip any any -> 158.164.39.51 any (flow:established,to_server; msg:"CTI-Toolkit connection to potentially malicious server 158.164.39.51 (ID cert_au:Observable-fe5ddeac-f9b0-4488-9f89-bfbd9351efd4)"; sid:5500000; rev:1; classtype:bad-unknown;)
         alert ip any any -> 111.222.33.44 any (flow:established,to_server; msg:"CTI-Toolkit connection to potentially malicious server 111.222.33.44 (ID cert_au:Observable-ccccceac-f9b0-4488-9f89-bfbd9351efd4)"; sid:5500001; rev:1; classtype:bad-unknown;)
         alert tcp any any -> $EXTERNAL_NET $HTTP_PORTS (flow:established,to_server; content:"bad.domain.org"; http_header; nocase; msg:"CTI-Toolkit connection to potentially malicious domain bad.domain.org (ID cert_au:Observable-6517027e-2cdb-47e8-b5c8-50c6044e42de)"; sid:5500002; rev:1; classtype:bad-unknown;)

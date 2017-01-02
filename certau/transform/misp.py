@@ -9,12 +9,14 @@ from cybox.objects.uri_object import URI
 # suppress PyMISP warning about Python 2
 warnings.filterwarnings('ignore', 'You\'re using python 2, it is strongly '
                         'recommended to use python >=3.3')
+warnings.filterwarnings('ignore', 'You\'re using python 2, it is strongly '
+                        'recommended to use python >=3.4')
 from pymisp import PyMISP
 
-from .base import StixTransform
+from certau.transform import StixTransform
 
 
-class StixMispTransform(StixTransform):
+class MispTransform(StixTransform):
     """Insert data from a STIX package into a MISP event.
 
     This class inserts data from a STIX package into MISP (the Malware
@@ -77,13 +79,13 @@ class StixMispTransform(StixTransform):
         'WinRegistryKey': 'add_regkey',
     }
 
-    def __init__(self, package, misp,
+    def __init__(self, misp,
                  distribution=0,   # this organisation only
                  threat_level=1,   # threat
                  analysis=2,       # analysis
                  information=None,
                  published=False):
-        super(StixMispTransform, self).__init__(package)
+        super(MispTransform, self).__init__()
         self._misp = misp
         self._misp_distribution = distribution
         self._misp_threat_level = threat_level
@@ -106,8 +108,10 @@ class StixMispTransform(StixTransform):
     def init_misp_event(self):
         if not self._misp_information:
             # Try the package header for some 'info'
-            title = self.package_title(default=self._package.id_)
-            description = self.package_description()
+            # title = self._package.title(default=self._package.id())
+            # description = self._package.description()
+            title = ''
+            description = self.source.description if self.source else ''
             if title or description:
                 self._misp_information = title
                 if title and description:
@@ -115,10 +119,12 @@ class StixMispTransform(StixTransform):
                 if description:
                     self._misp_information += description
 
-        if self._package.timestamp:
-            timestamp = self._package.timestamp
-        else:
-            timestamp = datetime.now()
+        # TODO: Use the indicator timestamp
+        # if self._package.package.timestamp:
+        #     timestamp = self._package.package.timestamp
+        # else:
+        #     timestamp = datetime.now()
+        timestamp = datetime.now()
 
         self._event = self._misp.new_event(
             distribution=self._misp_distribution,
@@ -135,9 +141,9 @@ class StixMispTransform(StixTransform):
         # TLP:GREEN: 3
         # TLP:WHITE: 4
 
-        tlp_tags = {'red': 1, 'amber': 2, 'green': 3, 'white': 4}
-        tlp_tag_id = tlp_tags[self.package_tlp().lower()]
-        self._misp.add_tag(self._event, tlp_tag_id)
+        # tlp_tags = {'red': 1, 'amber': 2, 'green': 3, 'white': 4}
+        # tlp_tag_id = tlp_tags[self._package.tlp().lower()]
+        # self._misp.add_tag(self._event, tlp_tag_id)
 
     def publish_fields(self, fields, object_type):
         if isinstance(self.MISP_FUNCTION_MAPPING[object_type], list):
@@ -180,18 +186,21 @@ class StixMispTransform(StixTransform):
             time.sleep(0.5)
 
     def publish_observable(self, observable, object_type):
-        if 'fields' in observable:
-            for fields in observable['fields']:
-                self.publish_fields(fields, object_type)
+        fields = self._field_values_for_observable(observable)
+        for fields in fields:
+            self.publish_fields(fields, object_type)
 
     def publish(self):
-        if self._observables:
+        if self.observables_by_type:
             self._logger.info("Publishing results to MISP")
             self.init_misp_event()
             time.sleep(0.5)
             for object_type in sorted(self.OBJECT_FIELDS.keys()):
-                if object_type in self._observables:
-                    for observable in self._observables[object_type]:
+                if object_type in self.observables_by_type:
+                    for observable in self.observables_by_type[object_type]:
                         self.publish_observable(observable, object_type)
         else:
             self._logger.info("Package has no observables - skipping")
+
+    def do_transform(self):
+        return self.publish()

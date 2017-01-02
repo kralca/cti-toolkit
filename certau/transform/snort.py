@@ -1,9 +1,9 @@
 from urlparse import urlparse
 
-from .text import StixTextTransform
+from certau.transform import TextTransform
 
 
-class StixSnortTransform(StixTextTransform):
+class SnortTransform(TextTransform):
     """Generate observable details for Snort.
 
     This class can be used to generate a list of indicators (observables)
@@ -33,11 +33,14 @@ class StixSnortTransform(StixTextTransform):
         'URI': ['value'],
     }
 
-    def __init__(self, package, separator='\t', include_header=False,
+    def __init__(self, output, separator='\t', include_header=False,
                  header_prefix='#', snort_initial_sid=5500000,
                  snort_rule_revision=1, snort_rule_action='alert'):
-        super(StixSnortTransform, self).__init__(
-            package, separator, include_header, header_prefix
+        super(SnortTransform, self).__init__(
+                output=output,
+                separator=separator,
+                include_header=include_header,
+                header_prefix=header_prefix,
         )
         self._sid = int(snort_initial_sid)
         self._snort_rule_revision = int(snort_rule_revision)
@@ -55,10 +58,11 @@ class StixSnortTransform(StixTextTransform):
 
     def text_for_observable(self, observable, object_type):
         text = ''
-        id_ = observable['id']
+        id_ = observable.id_
         if self.OBJECT_FIELDS and object_type in self.OBJECT_FIELDS:
+            fields = self._field_values_for_observable(observable)
             if object_type == 'Address' or object_type == 'SocketAddress':
-                for field in observable['fields']:
+                for field in fields:
                     if object_type == 'Address':
                         address = field['address_value']
                     else:
@@ -72,7 +76,7 @@ class StixSnortTransform(StixTextTransform):
                         ],
                     )
             elif object_type == 'DomainName':
-                for field in observable['fields']:
+                for field in fields:
                     domain = field['value']
                     text += self._snort_rule_text(
                         match='tcp any any -> $EXTERNAL_NET $HTTP_PORTS',
@@ -86,7 +90,7 @@ class StixSnortTransform(StixTextTransform):
                         ],
                     )
             elif object_type == 'URI':
-                for field in observable['fields']:
+                for field in fields:
                     url = urlparse(field['value'])
                     text += self._snort_rule_text(
                         match='tcp any any -> $EXTERNAL_NET $HTTP_PORTS',

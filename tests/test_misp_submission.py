@@ -7,6 +7,7 @@ import json
 import mock
 import StringIO
 
+import certau.source
 import certau.transform
 import stix.core
 
@@ -15,14 +16,11 @@ import stix.core
 @mock.patch('certau.transform.misp.time.sleep')
 def test_misp_publishing(_):
     """Test that the stixtrans module can submit to a MISP server."""
-    # STIX file to test against. Place in a StringIO instance so we can
-    # close the file.
-    with open('tests/CA-TEST-STIX.xml', 'rb') as stix_f:
-        stix_io = StringIO.StringIO(stix_f.read())
+    # STIX file to test against.
+    source = certau.source.FileSource(['tests/CA-TEST-STIX.xml'])
 
     # Create a transformer - select 'text' output format and flag MISP
     # publishing (with appropriate settings).
-    package = stix.core.STIXPackage.from_xml(stix_io)
     misp_args = {
         'misp_url': 'http://misp.host.tld/',
         'misp_key': '111111111111111111111111111',
@@ -75,15 +73,14 @@ def test_misp_publishing(_):
     )
 
     # Perform the processing and the misp publishing.
-    misp = certau.transform.StixMispTransform.get_misp_object(
+    misp = certau.transform.MispTransform.get_misp_object(
         **misp_args
     )
-    transformer = certau.transform.StixMispTransform(
-        package=package,
+    transformer = certau.transform.MispTransform(
         misp=misp,
         **misp_event_args
     )
-    transformer.publish()
+    transformer.process_source(source)
 
     # Test the correct requests were made
     reqs = list(httpretty.httpretty.latest_requests)

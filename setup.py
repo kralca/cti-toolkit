@@ -4,7 +4,7 @@ from setuptools import setup
 
 setup(
     name='cti-toolkit',
-    version='1.1.0.dev2',
+    version='1.2.0.dev1',
     description='CERT Australia cyber threat intelligence (CTI) toolkit',
     url='https://github.com/certau/cti-toolkit/',
     author='CERT Australia, Australian Government',
@@ -24,6 +24,9 @@ setup(
     keywords='STIX TAXII',
     packages={
         'certau',
+        'certau/lib',
+        'certau/lib/stix',
+        'certau/lib/taxii',
         'certau/scripts',
         'certau/source',
         'certau/transform',

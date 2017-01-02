@@ -24,9 +24,9 @@ __all__ = ['base', 'text', 'stats', 'csv', 'brointel', 'misp', 'snort']
 
 
 from .base import StixTransform
-from .text import StixTextTransform
-from .stats import StixStatsTransform
-from .csv import StixCsvTransform
-from .brointel import StixBroIntelTransform
-from .snort import StixSnortTransform
-from .misp import StixMispTransform
+from .text import TextTransform
+from .stats import StatsTransform
+from .csv import CsvTransform
+from .brointel import BroIntelTransform
+from .snort import SnortTransform
+from .misp import MispTransform

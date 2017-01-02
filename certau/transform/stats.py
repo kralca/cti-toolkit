@@ -1,7 +1,7 @@
-from .text import StixTextTransform
+from certau.transform import TextTransform
 
 
-class StixStatsTransform(StixTextTransform):
+class StatsTransform(TextTransform):
     """Generate summary statistics for a STIX package.
 
     Prints a count of the number of observables for each object type
@@ -18,26 +18,33 @@ class StixStatsTransform(StixTextTransform):
             the text output
     """
 
-    LINE = '++++++++++++++++++++++++++++++++++++++++'
-
-    def __init__(self, package, separator='\t', include_header=True,
-                 header_prefix='', pretty_text=True):
-        super(StixStatsTransform, self).__init__(
-            package, separator, include_header, header_prefix,
+    def __init__(self, output, separator='\t', include_header=True,
+                 header_prefix='#', pretty_text=True):
+        super(StatsTransform, self).__init__(
+            output=output,
+            separator=separator,
+            include_header=include_header,
+            header_prefix=header_prefix,
         )
         self._pretty_text = pretty_text
 
-    def _package_stats(self):
-        elements = {
+    def reset(self):
+        super(StatsTransform, self).reset()
+        # Package elements for counting
+        self.countables = {
             'campaigns': set(),
             'courses_of_action': set(),
             'exploit_targets': set(),
+            'incidents': set(),
             'indicators': set(),
             'kill_chains': set(),
             'observables': set(),
             'threat_actors': set(),
             'ttps': set(),
         }
+
+    def add_package(self, package):
+        super(StatsTransform, self).add_package(package)
 
         def _process_indicator(indicator):
             """Count all indicators except compositions."""
@@ -46,7 +53,7 @@ class StixStatsTransform(StixTextTransform):
                     _process_indicator(i)
             else:
                 if indicator.id_:
-                    elements['indicators'].add(indicator.id_)
+                    self.countables['indicators'].add(indicator.id_)
                 if len(indicator.observables):
                     for o in indicator.observables:
                         _process_observable(o)
@@ -58,13 +65,13 @@ class StixStatsTransform(StixTextTransform):
                     _process_observable(o)
             else:
                 if observable.id_:
-                    elements['observables'].add(observable)
+                    self.countables['observables'].add(observable)
 
-        for key in elements.keys():
+        for key in self.countables.keys():
             if key == 'kill_chains':
-                list_ = getattr(self._package.ttps, key)
+                list_ = getattr(package.package.ttps, key)
             else:
-                list_ = getattr(self._package, key)
+                list_ = getattr(package.package, key)
 
             self._logger.debug(list_)
             if list_:
@@ -75,15 +82,14 @@ class StixStatsTransform(StixTextTransform):
                         _process_observable(v)
                     else:
                         if v.id_:
-                            elements[key].add(v.id_)
-
-        return elements
+                            self.countables[key].add(v.id_)
 
     def text_for_package_stats(self):
         labels = {
             'campaigns': 'Campaigns',
             'courses_of_action': 'Courses of action',
             'exploit_targets': 'Exploit targets',
+            'incidents': 'Incidents',
             'indicators': 'Indicators',
             'kill_chains': 'Kill chains',
             'observables': 'Observables',
@@ -91,11 +97,11 @@ class StixStatsTransform(StixTextTransform):
             'ttps': 'TTPs',
         }
         text = ''
-        elements = self._package_stats()
+        elements = self.countables
         for e in sorted(elements.keys()):
             if len(elements[e]):
                 if self._pretty_text:
-                    text += '{0:<35} {1:>4}\n'.format(
+                    text += '{0:<35} {1:>7}\n'.format(
                         labels[e] + ':',
                         len(elements[e]),
                     )
@@ -105,28 +111,17 @@ class StixStatsTransform(StixTextTransform):
 
 
     def header(self):
-        header = self._header_prefix + self.LINE + '\n'
-        header += self._header_prefix + 'Summary statistics:'
-
-        title = self.package_title()
-        if title:
-            header += ' ' + title
-
-        tlp = self.package_tlp()
-        if tlp:
-            header += ' (' + tlp + ')'
-
-        header += '\n' + self._header_prefix + self.LINE + '\n'
+        header = super(StatsTransform, self).header()
         header += '\n' + self.text_for_package_stats() + '\n'
         return header
 
     def text_for_object_type(self, object_type):
-        if object_type in self._observables:
-            count = len(self._observables[object_type])
+        if object_type in self.observables_by_type:
+            count = len(self.observables_by_type[object_type])
         else:
             count = 0
         if self._pretty_text:
-            text = '{0:<35} {1:>4}\n'.format(
+            text = '{0:<35} {1:>7}\n'.format(
                 object_type + ' observables:',
                 count,
             )

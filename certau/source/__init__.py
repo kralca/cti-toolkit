@@ -3,6 +3,9 @@
 These classes should implement the ``next_stix_package()`` method.
 """
 
+__all__ = ['base', 'files', 'taxii']
+
+
 from .base import StixSource
-from .taxii import SimpleTaxiiClient
-from .files import StixFileSource
+from .files import FileSource
+from .taxii import TaxiiPollResponseSource

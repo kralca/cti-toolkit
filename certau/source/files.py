@@ -1,10 +1,12 @@
+import datetime
 import os
 import logging
 
-from .base import StixSource
+from certau.source import StixSource
+from certau.lib.stix import StixPackageContainer
 
 
-class StixFileSource(StixSource):
+class FileSource(StixSource):
     """Return STIX packages from a file or directory.
 
     Args:
@@ -15,11 +17,30 @@ class StixFileSource(StixSource):
     """
 
     def __init__(self, files, recurse=False):
-        self._logger = logging.getLogger()
-        self._files = []
+        super(FileSource, self).__init__()
+        self.files = []
         for file_ in files:
             self._add_file(file_, recurse)
-        self._index = 0
+        self.packages = self.all_packages()
+
+        # Set the description
+        count = len(self.packages)
+        self.description = (
+            "{} STIX package{} from {} ({}{}{})".format(
+                count,
+                "s" if count > 1 else "",
+                "{} '{}'".format(
+                    "directory" if os.path.isdir(files[0]) else "file",
+                    files[0],
+                ) if len(files) == 1 else "various files",
+                "recursion: true; " if recurse else "",
+                "file prefix: '{}*'; ".format(
+                    os.path.commonprefix(self.files)) if len(files) > 1 else '',
+                "processed: '{}'".format(
+                    datetime.datetime.now().isoformat(' '),
+                )
+            )
+        )
 
     def _add_file(self, file_, recurse):
         if os.path.isdir(file_):
@@ -28,21 +49,21 @@ class StixFileSource(StixSource):
                 if os.path.isdir(path) and recurse:
                     self._add_file(path, recurse)
                 elif os.path.isfile(path):
-                    self._files.append(path)
+                    self.files.append(path)
         elif os.path.isfile(file_):
-            self._files.append(file_)
+            self.files.append(file_)
 
     def next_stix_package(self):
         package = None
-        while self._index < len(self._files):
-            file_ = self._files[self._index]
-            self._index += 1
-            package = self.load_stix_package(file_)
-            if package:
+        while self.index < len(self.files):
+            file_ = self.files[self.index]
+            package = StixPackageContainer.from_file(file_)
+            self.index += 1
+            if package is not None:
+                package.source_metadata['filename'] = os.path.basename(file_)
                 break
             else:
                 self._logger.info(
                     "skipping file '%s' - invalid XML/STIX" % file_
                 )
-
         return package
