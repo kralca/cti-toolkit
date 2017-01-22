@@ -92,6 +92,8 @@ class StixTransform(object):
     def reset(self):
         self.packages = dict()    # package id -> package
         self.elements = dict()    # element id -> element
+        for elem in self.PACKAGE_ELEMENTS:
+            self.elements[elem] = {}
         self.containers = dict()  # element id -> package
         self.observables_by_type = dict()  # object type -> observable list
 

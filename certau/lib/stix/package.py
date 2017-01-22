@@ -22,7 +22,7 @@ class StixPackageContainer(object):
             package = STIXPackage.from_xml(file_io)
 
         except UnsupportedVersionError:
-            updated = ramrod.update(stix_file, to_='1.1.1')
+            updated = ramrod.update(file_io, to_='1.1.1')
             document = updated.document.as_stringio()
             try:
                 package = STIXPackage.from_xml(document)
