@@ -15,16 +15,9 @@ class ElasticsearchTransform(StixTransform):
         'description',
     ]
 
-    def __init__(self, package, elasticsearch, index='ctitoolkit'):
-        super(ElasticsearchTransform, self).__init__(
-            #package=package, 
-            #elasticsearch=elasticsearch
-            )
-        #self._es = Elasticsearch(['elastic'])
-        self._es = Elasticsearch([{'host': '10.20.34.40', 'port': 9200}])
-        print package 
-        print elasticsearch
-        print index
+    def __init__(self, elasticsearchURL, elasticsearchPORT, index='ctitoolkit'):
+        super(ElasticsearchTransform, self).__init__()
+        self._es = Elasticsearch([{'host': elasticsearchURL, 'port': elasticsearchPORT}])
 
 
         self._index = index
@@ -37,19 +30,19 @@ class ElasticsearchTransform(StixTransform):
                 if isinstance(type_,dict):
                     new_list.append(type_['value'])                
                 elif isinstance(type_,str):
-                    print doc
                     new_list.append(type_)
             doc['indicator_types'] = new_list
 
-    def _fix_indicated_ttps(self, doc):
-        indicated_ttps = doc.get('indicated_ttps')
-        if indicated_ttps is not None:
-            new_list = []
-            for ttp in indicated_ttps:
-                if 'title' in ttp['ttp']:
-                    new_list.append(ttp['ttp']['title'])
-                else:
-                    new_list.append(ttp['ttp']['id'])
+    def _fix_indicated_ttps(self, doc, indicator):
+        ttps = self.dereference_indicator_element(indicator, 'indicated_ttps')
+        new_list = []
+        for ttp_obj in ttps:
+            ttp = ttp_obj.to_dict()
+            if 'title' in ttp:
+                new_list.append(ttp['title'])
+            else:
+                new_list.append(ttp['id'])
+        if new_list:
             doc['indicated_ttps'] = new_list
 
     def _fix_observables(self, doc):
@@ -65,10 +58,11 @@ class ElasticsearchTransform(StixTransform):
 
     def publish(self):
         #self._reconstruct_indicators()
+        #self.process_indicators()
         for id_, indicator in self.elements['indicators'].iteritems():
             doc = indicator.to_dict()
+            self._fix_indicated_ttps(doc, indicator)
             self._fix_indicator_types(doc)
-            self._fix_indicated_ttps(doc)
             self._fix_observables(doc)
 
             del doc['id']
@@ -81,9 +75,9 @@ class ElasticsearchTransform(StixTransform):
                 )
                 #print result
             except:
-                print doc
+                print "WARNING"
                 print sys.exc_info()
-                raise
+                
 
     def do_transform(self):
         return self.publish()

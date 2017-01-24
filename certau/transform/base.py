@@ -149,6 +149,11 @@ class StixTransform(object):
             indicator=indicator,
             element='observables',
         )
+        #tmp = self.dereference_indicator_element(
+        #    indicator=indicator,
+        #    element='indicated_ttps',
+        #)
+        
         self.process_observables(observables)
 
     def process_observables(self, observables=None):
@@ -161,6 +166,7 @@ class StixTransform(object):
             self.observables_by_type[object_type].append(observable)
 
     def dereference_indicator_element(self, indicator, element):
+        print indicator.to_dict()
         values = getattr(indicator, element, None)
         self._logger.error('values = %s', values)
         if values is not None:
@@ -183,7 +189,7 @@ class StixTransform(object):
                 if new_value is None:
                     self._logger.warning("unable to dereference '%s' "
                                          "element with id '%s'",
-                                         element, idref)
+                                         sub_element, idref)
             # No need to dereference
             else:
                 new_value = value

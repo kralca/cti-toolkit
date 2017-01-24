@@ -374,8 +374,8 @@ def main():
 
     if options.elasticsearch:
         transforms.append(ElasticsearchTransform(
-            package='package1',
-            elasticsearch='potato',
+            elasticsearchURL='10.20.34.40',
+            elasticsearchPORT='9200',
             #output=sys.stdout,
             #snort_initial_sid=options.snort_initial_sid,
             #snort_rule_revision=options.snort_rule_revision,
