@@ -4,6 +4,8 @@ from elasticsearch import Elasticsearch
 
 from .base import StixTransform
 
+import sys
+
 
 class ElasticsearchTransform(StixTransform):
 
@@ -29,18 +31,14 @@ class ElasticsearchTransform(StixTransform):
 
     def _fix_indicator_types(self, doc):
         indicator_types = doc.get('indicator_types')
-        print 'doc',type(doc)
-        print 'indicator_types',type(indicator_types)
-        print 'indicator_types',indicator_types
         if indicator_types is not None:
             new_list = []
             for type_ in indicator_types:
-                #new_list.append(type_['value'])               
-                try: 
-                    new_list.append(type_.get('value'))                
-                except:
-                    #likely that type_ is not a dict
-                    pass
+                if isinstance(type_,dict):
+                    new_list.append(type_['value'])                
+                elif isinstance(type_,str):
+                    print doc
+                    new_list.append(type_)
             doc['indicator_types'] = new_list
 
     def _fix_indicated_ttps(self, doc):
@@ -74,14 +72,19 @@ class ElasticsearchTransform(StixTransform):
             self._fix_observables(doc)
 
             del doc['id']
+            try:
+                result = self._es.index(
+                    index=self._index,
+                    id=id_,
+                    body=doc,
+                    doc_type='stix',
+                )
+                #print result
+            except:
+                print doc
+                print sys.exc_info()
+                raise
 
-            result = self._es.index(
-                index=self._index,
-                id=id_,
-                body=doc,
-                doc_type='stix',
-            )
-            print result
     def do_transform(self):
         return self.publish()
 
