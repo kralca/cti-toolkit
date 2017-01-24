@@ -14,6 +14,7 @@ from certau.lib.taxii import SimpleTaxiiClient
 from certau.source import FileSource, TaxiiPollResponseSource
 from certau.transform import CsvTransform, StatsTransform, SnortTransform
 from certau.transform import BroIntelTransform, MispTransform
+from certau.transform import ElasticsearchTransform
 
 
 def get_arg_parser():
@@ -77,36 +78,53 @@ def get_arg_parser():
 
     # Output (transform) options
     output_group = parser.add_argument_group('output (transform) options')
-    output_group.add_argument(
+    output_ex_group = output_group.add_mutually_exclusive_group(required=True)
+    
+
+    #output_group.add_argument(
+    output_ex_group.add_argument(
         "-s", "--stats",
         action="store_true",
         help="display summary statistics for each STIX package",
     )
-    output_group.add_argument(
+    #output_group.add_argument(
+    output_ex_group.add_argument(
         "-t", "--text",
         action="store_true",
         help="output observables in delimited text",
     )
-    output_group.add_argument(
+    #output_group.add_argument(
+    output_ex_group.add_argument(
         "-b", "--bro",
         action="store_true",
         help="output observables in Bro intel framework format",
     )
-    output_group.add_argument(
+    #output_group.add_argument(
+    output_ex_group.add_argument(
         "-m", "--misp",
         action="store_true",
         help="send output to a MISP server",
     )
-    output_group.add_argument(
+    #output_group.add_argument(
+    output_ex_group.add_argument(
         "--snort",
         action="store_true",
         help="output observables in Snort rule format",
     )
-    output_group.add_argument(
+    #output_group.add_argument(
+    output_ex_group.add_argument(
         "-x", "--xml-output",
         help=("output XML STIX packages (one per file) to the given directory "
               "(use with --taxii)"),
     )
+
+    output_ex_group.add_argument(
+        "-e", "--elasticsearch",
+        action="store_true",
+        help=("send indicators to an elasticsearch instance")
+    )
+
+
 
     # File source options
     file_group = parser.add_argument_group(
@@ -351,6 +369,24 @@ def main():
             snort_rule_revision=options.snort_rule_revision,
             snort_rule_action=options.snort_rule_action,
         ))
+
+
+
+    if options.elasticsearch:
+        transforms.append(ElasticsearchTransform(
+            package='package1',
+            elasticsearch='potato',
+            #output=sys.stdout,
+            #snort_initial_sid=options.snort_initial_sid,
+            #snort_rule_revision=options.snort_rule_revision,
+            #snort_rule_action=options.snort_rule_action,
+        ))
+
+
+        #transform_class = StixElasticsearchTransform
+        #transform_kwargs['elasticsearch'] = 'blahblahblah'
+
+
 
     if options.xml_output and not options.taxii:
         # XML output option will be ignored if source is not TAXII

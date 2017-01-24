@@ -5,7 +5,7 @@ from elasticsearch import Elasticsearch
 from .base import StixTransform
 
 
-class StixElasticsearchTransform(StixTransform):
+class ElasticsearchTransform(StixTransform):
 
     COPY_FIELDS = [
         'timestamp',
@@ -14,9 +14,14 @@ class StixElasticsearchTransform(StixTransform):
     ]
 
     def __init__(self, package, elasticsearch, index='ctitoolkit'):
-        super(StixElasticsearchTransform, self).__init__(package)
+        super(ElasticsearchTransform, self).__init__(
+            #package=package, 
+            #elasticsearch=elasticsearch
+            )
         #self._es = Elasticsearch(['elastic'])
         self._es = Elasticsearch([{'host': '10.20.34.40', 'port': 9200}])
+        print package 
+        print elasticsearch
         print index
 
 
@@ -24,10 +29,18 @@ class StixElasticsearchTransform(StixTransform):
 
     def _fix_indicator_types(self, doc):
         indicator_types = doc.get('indicator_types')
+        print 'doc',type(doc)
+        print 'indicator_types',type(indicator_types)
+        print 'indicator_types',indicator_types
         if indicator_types is not None:
             new_list = []
             for type_ in indicator_types:
-                new_list.append(type_['value'])
+                #new_list.append(type_['value'])               
+                try: 
+                    new_list.append(type_.get('value'))                
+                except:
+                    #likely that type_ is not a dict
+                    pass
             doc['indicator_types'] = new_list
 
     def _fix_indicated_ttps(self, doc):
@@ -53,8 +66,8 @@ class StixElasticsearchTransform(StixTransform):
                 doc['observables'] = [ observable ]
 
     def publish(self):
-        self._reconstruct_indicators()
-        for id_, indicator in self._package_parts['indicators'].iteritems():
+        #self._reconstruct_indicators()
+        for id_, indicator in self.elements['indicators'].iteritems():
             doc = indicator.to_dict()
             self._fix_indicator_types(doc)
             self._fix_indicated_ttps(doc)
@@ -69,3 +82,6 @@ class StixElasticsearchTransform(StixTransform):
                 doc_type='stix',
             )
             print result
+    def do_transform(self):
+        return self.publish()
+
