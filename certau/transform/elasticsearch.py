@@ -65,6 +65,8 @@ class ElasticsearchTransform(StixTransform):
             self._fix_indicator_types(doc)
             self._fix_observables(doc)
             tlp = self.get_tlp_from_indicator(id_, indicator)
+            source_metadata = self.containers[id_].source_metadata
+            doc['source_metadata'] = source_metadata
             doc['tlp'] = tlp
 
             del doc['id']

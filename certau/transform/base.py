@@ -111,7 +111,7 @@ class StixTransform(object):
                         if element not in self.elements:
                             self.elements[element] = dict()
                         self.elements[element][id_] = value
-                        self.containers[id_] = package
+                        self.containers[id_] = source_package
             if element == 'ttps':
                 kill_chains = getattr(values, 'kill_chains', None)
                 if kill_chains is not None:
@@ -386,11 +386,12 @@ class StixTransform(object):
                             return marking_struct.color
                         
                 
-        return self.get_tlp_from_package(self.containers[id_])
+        #return self.get_tlp_from_package(self.containers[id_])
+        return self.containers[id_].tlp()
     
 
 
-
+    '''
     def get_tlp_from_package(self, package, default='AMBER'):
         """Retrieves the STIX package TLP (str) from the header."""
         if package.stix_header:
@@ -402,7 +403,7 @@ class StixTransform(object):
                             return marking_struct.color
         return default
 
-
+    '''
 
 
 
