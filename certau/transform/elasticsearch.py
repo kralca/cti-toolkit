@@ -68,6 +68,8 @@ class ElasticsearchTransform(StixTransform):
             source_metadata = self.containers[id_].source_metadata
             doc['source_metadata'] = source_metadata
             doc['tlp'] = tlp
+            doc['source_id']= id_.split(':')[0]
+
 
             del doc['id']
             try:
