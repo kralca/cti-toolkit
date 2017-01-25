@@ -6,6 +6,7 @@ from cybox import EntityList
 from cybox.core import Object
 from cybox.common import ObjectProperties
 
+from stix.extensions.marking.tlp import TLPMarkingStructure
 
 class StixTransform(object):
     """Base class for transforming a STIX package to an alternate format.
@@ -128,6 +129,9 @@ class StixTransform(object):
     def process_source(self, source, aggregate=False):
         self.source = source
         packages = source.all_packages()
+        #print packages[0].source_metadata
+        #print packages[0].tlp()
+        #print type(packages[0])
         if aggregate:
             self.reset()
             for package in packages:
@@ -166,9 +170,8 @@ class StixTransform(object):
             self.observables_by_type[object_type].append(observable)
 
     def dereference_indicator_element(self, indicator, element):
-        print indicator.to_dict()
         values = getattr(indicator, element, None)
-        self._logger.error('values = %s', values)
+        self._logger.info('values = %s', values)
         if values is not None:
             mapped_to = self.INDICATOR_ELEMENT_MAPPING[element]
             sub_element = 'item' if element == 'indicated_ttps' else None
@@ -366,3 +369,41 @@ class StixTransform(object):
                                                  full_first_part)
                 else:
                     _add_value_to_values(values, value, full_first_part)
+
+
+
+
+
+
+    def get_tlp_from_indicator(self, id_, indicator, default='AMBER'):
+        """Retrieves the STIX package TLP (str) from the header."""
+        if indicator.handling:
+            handling = indicator.handling
+            if handling and handling.markings:
+                for marking_spec in handling.markings:
+                    for marking_struct in marking_spec.marking_structures:
+                        if isinstance(marking_struct, TLPMarkingStructure):
+                            return marking_struct.color
+                        
+                
+        return self.get_tlp_from_package(self.containers[id_])
+    
+
+
+
+    def get_tlp_from_package(self, package, default='AMBER'):
+        """Retrieves the STIX package TLP (str) from the header."""
+        if package.stix_header:
+            handling = package.stix_header.handling
+            if handling and handling.markings:
+                for marking_spec in handling.markings:
+                    for marking_struct in marking_spec.marking_structures:
+                        if isinstance(marking_struct, TLPMarkingStructure):
+                            return marking_struct.color
+        return default
+
+
+
+
+
+

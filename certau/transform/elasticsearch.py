@@ -64,6 +64,8 @@ class ElasticsearchTransform(StixTransform):
             self._fix_indicated_ttps(doc, indicator)
             self._fix_indicator_types(doc)
             self._fix_observables(doc)
+            tlp = self.get_tlp_from_indicator(id_, indicator)
+            doc['tlp'] = tlp
 
             del doc['id']
             try:
