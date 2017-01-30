@@ -57,9 +57,6 @@ class ElasticsearchTransform(StixTransform):
                 doc['observables'] = [ observable ]
 
     def publish(self, bulk_fn):
-        #self._reconstruct_indicators()
-        #self.process_indicators()
-
         def generator():
          
             for id_, indicator in self.elements['indicators'].iteritems():
@@ -89,9 +86,7 @@ class ElasticsearchTransform(StixTransform):
         for ok, result in bulk_fn(self._es, generator()):
             if not ok:
                 logger.warning("A document failed: %s", str(result))
-                
-                
+
 
     def do_transform(self):
         return self.publish(parallel_bulk)
-

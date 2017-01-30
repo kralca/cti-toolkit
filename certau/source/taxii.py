@@ -61,9 +61,6 @@ class TaxiiPollResponseSource(StixSource):
         end_timestamp = self._poll_response.inclusive_end_timestamp_label
         return end_timestamp.isoformat() if end_timestamp else None
 
-
-
-
     def save_content_blocks(self, directory):
         """Save poll response content blocks to given directory."""
         if os.path.exists(directory) and self._poll_response:
@@ -77,10 +74,4 @@ class TaxiiPollResponseSource(StixSource):
         else:
             raise Exception('output directory for TAXII content blocks ({}) '
 'does not exist'.format(directory))
-
-
-
-
-
-
 

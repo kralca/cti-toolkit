@@ -129,9 +129,6 @@ class StixTransform(object):
     def process_source(self, source, aggregate=False):
         self.source = source
         packages = source.all_packages()
-        #print packages[0].source_metadata
-        #print packages[0].tlp()
-        #print type(packages[0])
         if aggregate:
             self.reset()
             for package in packages:
@@ -365,11 +362,6 @@ class StixTransform(object):
                                                  full_first_part)
                 else:
                     _add_value_to_values(values, value, full_first_part)
-
-
-
-
-
 
     def get_tlp_from_indicator(self, id_, indicator, default='AMBER'):
         """Retrieves the STIX package TLP (str) from the header."""
