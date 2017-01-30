@@ -4,11 +4,12 @@ into the Bro Intelligence Format. It can interact with a TAXII server to obtain
 the STIX package(s), or a STIX package file can be supplied.
 """
 
-import sys
+import sys,os
 import logging
 import pkg_resources
-
-import configargparse
+import pickle
+from urlparse import urlparse, urlunparse
+import configargparse, dateutil
 
 from certau.lib.taxii import SimpleTaxiiClient
 from certau.source import FileSource, TaxiiPollResponseSource
@@ -202,6 +203,11 @@ def get_arg_parser():
         help="a subscription ID for the poll request",
     )
 
+    taxii_group.add_argument(
+        "--state-file",
+        help="file used to maintain latest poll times",
+    )
+
     # Miscellaneous output options
     other_group = parser.add_argument_group(
         title='other output options',
@@ -311,6 +317,33 @@ def get_arg_parser():
     return parser
 
 
+def get_taxii_poll_state(filename, poll_url, collection):
+    if os.path.isfile(filename):
+        with open(filename, 'r') as state_file:
+            poll_state = pickle.load(state_file)
+            if isinstance(poll_state, dict) and poll_url in poll_state:
+                if collection in poll_state[poll_url]:
+                    return poll_state[poll_url][collection]
+    return None
+
+
+
+def set_taxii_poll_state(filename, poll_url, collection, timestamp):
+    if timestamp is not None:
+        poll_state = dict()
+        if os.path.isfile(filename):
+            with open(filename, 'r') as state_file:
+                poll_state = pickle.load(state_file)
+                if not isinstance(poll_state, dict):
+                    raise Exception('unexpected content encountered when '
+                                    'reading TAXII poll state file')
+        if poll_url not in poll_state:
+            poll_state[poll_url] = dict()
+        poll_state[poll_url][collection] = timestamp
+        with open(filename, 'w') as state_file:
+            pickle.dump(poll_state, state_file)
+
+
 def main():
     parser = get_arg_parser()
     options = parser.parse_args()
@@ -400,6 +433,7 @@ def main():
     # Collect data from source
     if options.taxii:
         logger.info("Processing a TAXII poll request/response")
+
         taxii_client = SimpleTaxiiClient(
             username=options.username,
             password=options.password,
@@ -407,6 +441,32 @@ def main():
             cert_file=options.cert,
             ca_file=options.ca_file,
         )
+
+        if options.poll_url is not None:
+            parsed_url = urlparse(options.poll_url)
+            options.hostname = parsed_url.hostname
+            options.path = parsed_url.path
+            options.port = parsed_url.port
+            options.ssl = (parsed_url.scheme == 'https')
+        else:
+            scheme = 'https' if options.ssl else 'http'
+            netloc = options.hostname
+            if options.port:
+                netloc += ':{}'.format(options.port)
+            options.poll_url = urlunparse([
+                scheme, netloc, options.path, '', '', '',
+            ])
+        if options.state_file and not options.begin_timestamp:
+            options.begin_timestamp = get_taxii_poll_state(
+                filename=options.state_file,
+                poll_url=options.poll_url,
+                collection=options.collection,
+            )        
+
+
+
+                
+
 
         # Parse begin and end timestamp datetime strings if provided
         if options.begin_timestamp:
@@ -418,6 +478,7 @@ def main():
             end_timestamp = dateutil.parser.parse(options.end_timestamp)
         else:
             end_timestamp = None
+
 
         # Create the poll request message
         poll_request = taxii_client.create_poll_request(
@@ -442,11 +503,21 @@ def main():
         poll_response = taxii_client.send_poll_request(poll_request, poll_url)
         source = TaxiiPollResponseSource(poll_response, poll_url)
 
+        #source.send_poll_request()
+        if options.state_file:
+            set_taxii_poll_state(
+                filename=options.state_file,
+                poll_url=options.poll_url,
+                collection=options.collection,
+                timestamp=source.get_poll_response_end_timestamp(),
+            )
+
         # Process the output
         if options.xml_output:
             logger.debug("Writing XML to %s", options.xml_output)
-            SimpleTaxiiClient.save_content_blocks(poll_response,
-                                                  options.xml_output)
+            source.save_content_blocks(options.xml_output)
+            #SimpleTaxiiClient.save_content_blocks(poll_response,
+            #                                      options.xml_output)
 
         logger.info("Processing TAXII content blocks")
     else:
