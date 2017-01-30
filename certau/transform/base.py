@@ -153,10 +153,6 @@ class StixTransform(object):
             indicator=indicator,
             element='observables',
         )
-        #tmp = self.dereference_indicator_element(
-        #    indicator=indicator,
-        #    element='indicated_ttps',
-        #)
         
         self.process_observables(observables)
 
@@ -384,27 +380,5 @@ class StixTransform(object):
                     for marking_struct in marking_spec.marking_structures:
                         if isinstance(marking_struct, TLPMarkingStructure):
                             return marking_struct.color
-                        
                 
-        #return self.get_tlp_from_package(self.containers[id_])
         return self.containers[id_].tlp()
-    
-
-
-    '''
-    def get_tlp_from_package(self, package, default='AMBER'):
-        """Retrieves the STIX package TLP (str) from the header."""
-        if package.stix_header:
-            handling = package.stix_header.handling
-            if handling and handling.markings:
-                for marking_spec in handling.markings:
-                    for marking_struct in marking_spec.marking_structures:
-                        if isinstance(marking_struct, TLPMarkingStructure):
-                            return marking_struct.color
-        return default
-
-    '''
-
-
-
-
