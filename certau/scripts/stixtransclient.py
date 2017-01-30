@@ -125,8 +125,6 @@ def get_arg_parser():
         help=("send indicators to an elasticsearch instance")
     )
 
-
-
     # File source options
     file_group = parser.add_argument_group(
         title='file input arguments (use with --file)',
@@ -314,6 +312,28 @@ def get_arg_parser():
         action="store_true",
         help="set MISP published state to True",
     )
+
+
+
+    # options for the elasticsearch transform
+    es_group = parser.add_argument_group(
+        title='elasticsearch output arguments (use with --elasticsearch)',
+    )
+   
+    es_group.add_argument(
+        "--es-hostname",
+        default='127.0.0.1',
+        type=str,
+        help=("elasticsearch hostname")
+    )
+
+    es_group.add_argument(
+        "--es-port",
+        default='9200',
+        type=str,
+        help=("elasticsearch port")
+    )
+
     return parser
 
 
@@ -407,19 +427,9 @@ def main():
 
     if options.elasticsearch:
         transforms.append(ElasticsearchTransform(
-            elasticsearchURL='10.20.34.40',
-            elasticsearchPORT='9200',
-            #output=sys.stdout,
-            #snort_initial_sid=options.snort_initial_sid,
-            #snort_rule_revision=options.snort_rule_revision,
-            #snort_rule_action=options.snort_rule_action,
+            elasticsearchURL=options.es_hostname,
+            elasticsearchPORT=options.es_port,
         ))
-
-
-        #transform_class = StixElasticsearchTransform
-        #transform_kwargs['elasticsearch'] = 'blahblahblah'
-
-
 
     if options.xml_output and not options.taxii:
         # XML output option will be ignored if source is not TAXII
