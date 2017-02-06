@@ -6,6 +6,7 @@ from cybox import EntityList
 from cybox.core import Object
 from cybox.common import ObjectProperties
 
+from stix.extensions.marking.tlp import TLPMarkingStructure
 
 class StixTransform(object):
     """Base class for transforming a STIX package to an alternate format.
@@ -92,6 +93,8 @@ class StixTransform(object):
     def reset(self):
         self.packages = dict()    # package id -> package
         self.elements = dict()    # element id -> element
+        for elem in self.PACKAGE_ELEMENTS:
+            self.elements[elem] = {}
         self.containers = dict()  # element id -> package
         self.observables_by_type = dict()  # object type -> observable list
 
@@ -108,7 +111,7 @@ class StixTransform(object):
                         if element not in self.elements:
                             self.elements[element] = dict()
                         self.elements[element][id_] = value
-                        self.containers[id_] = package
+                        self.containers[id_] = source_package
             if element == 'ttps':
                 kill_chains = getattr(values, 'kill_chains', None)
                 if kill_chains is not None:
@@ -147,6 +150,7 @@ class StixTransform(object):
             indicator=indicator,
             element='observables',
         )
+        
         self.process_observables(observables)
 
     def process_observables(self, observables=None):
@@ -160,7 +164,7 @@ class StixTransform(object):
 
     def dereference_indicator_element(self, indicator, element):
         values = getattr(indicator, element, None)
-        self._logger.error('values = %s', values)
+        self._logger.info('values = %s', values)
         if values is not None:
             mapped_to = self.INDICATOR_ELEMENT_MAPPING[element]
             sub_element = 'item' if element == 'indicated_ttps' else None
@@ -181,7 +185,7 @@ class StixTransform(object):
                 if new_value is None:
                     self._logger.warning("unable to dereference '%s' "
                                          "element with id '%s'",
-                                         element, idref)
+                                         sub_element, idref)
             # No need to dereference
             else:
                 new_value = value
@@ -358,3 +362,15 @@ class StixTransform(object):
                                                  full_first_part)
                 else:
                     _add_value_to_values(values, value, full_first_part)
+
+    def get_tlp_from_indicator(self, id_, indicator, default='AMBER'):
+        """Retrieves the STIX package TLP (str) from the header."""
+        if indicator.handling:
+            handling = indicator.handling
+            if handling and handling.markings:
+                for marking_spec in handling.markings:
+                    for marking_struct in marking_spec.marking_structures:
+                        if isinstance(marking_struct, TLPMarkingStructure):
+                            return marking_struct.color
+                
+        return self.containers[id_].tlp()
