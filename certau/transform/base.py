@@ -8,6 +8,7 @@ from cybox.common import ObjectProperties
 
 from stix.extensions.marking.tlp import TLPMarkingStructure
 
+
 class StixTransform(object):
     """Base class for transforming a STIX package to an alternate format.
 
@@ -128,7 +129,7 @@ class StixTransform(object):
 
     def process_source(self, source, aggregate=False):
         self.source = source
-        packages = source.all_packages()
+        packages = source.packages
         if aggregate:
             self.reset()
             for package in packages:
@@ -150,7 +151,7 @@ class StixTransform(object):
             indicator=indicator,
             element='observables',
         )
-        
+
         self.process_observables(observables)
 
     def process_observables(self, observables=None):
@@ -372,5 +373,5 @@ class StixTransform(object):
                     for marking_struct in marking_spec.marking_structures:
                         if isinstance(marking_struct, TLPMarkingStructure):
                             return marking_struct.color
-                
+
         return self.containers[id_].tlp()

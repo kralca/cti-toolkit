@@ -66,5 +66,5 @@ class StixPackageContainer(object):
         return default
 
     def source_metadata(self, field):
-        """Return a field from the source_metadata dict (or None if not available)."""
+        """Return a field from the source_metadata dict (or None)."""
         return self.source_metadata.get(field)

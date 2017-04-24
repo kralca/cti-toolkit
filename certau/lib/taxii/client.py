@@ -105,7 +105,7 @@ class SimpleTaxiiClient(HttpClient):
         return PollRequest(**request_kwargs)
 
     def send_poll_request(self, poll_request, poll_url):
-        """Send the given poll request to the TAXII server using the given URL."""
+        """Send the poll request to the TAXII server using the given URL."""
 
         # Parse the poll_url to get the parts required by libtaxii
         url_parts = urlparse.urlparse(poll_url)
@@ -116,7 +116,7 @@ class SimpleTaxiiClient(HttpClient):
             self.password = url_parts.password
             self._logger.debug('updating username and password from poll_url')
 
-        if url_parts.scheme not in [ 'http', 'https' ]:
+        if url_parts.scheme not in ['http', 'https']:
             raise Exception('invalid scheme in poll_url (%s); expected '
                             '"http" or "https"', poll_url)
         use_ssl = True if url_parts.scheme == 'https' else False
@@ -155,8 +155,8 @@ class SimpleTaxiiClient(HttpClient):
             try:
                 os.makedirs(directory)
             except:
-                raise Exception('output directory ({}) does not exist and an'
-                                'attempt to create it failed'.format(directory))
+                raise Exception('output directory ({}) does not exist and '
+                                'it could not be created'.format(directory))
 
         taxii_script = TaxiiScript()
         taxii_script.write_cbs_from_poll_response_11(poll_response, directory)

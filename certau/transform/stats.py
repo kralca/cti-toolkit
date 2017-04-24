@@ -109,7 +109,6 @@ class StatsTransform(TextTransform):
                     text += self.join([labels[e], len(elements[e])]) + '\n'
         return text
 
-
     def header(self):
         header = super(StatsTransform, self).header()
         header += '\n' + self.text_for_package_stats() + '\n'

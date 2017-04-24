@@ -20,8 +20,9 @@ class FileSource(StixSource):
         super(FileSource, self).__init__()
         self.files = []
         for file_ in files:
-            self._add_file(file_, recurse)
-        self.packages = self.all_packages()
+            self.add_file(file_, recurse)
+        self.packages = []
+        self.add_packages(files)
 
         # Set the description
         count = len(self.packages)
@@ -42,7 +43,7 @@ class FileSource(StixSource):
             )
         )
 
-    def _add_file(self, file_, recurse):
+    def add_file(self, file_, recurse):
         if os.path.isdir(file_):
             for dir_file in sorted(os.listdir(file_)):
                 path = os.path.join(file_, dir_file)
@@ -53,17 +54,14 @@ class FileSource(StixSource):
         elif os.path.isfile(file_):
             self.files.append(file_)
 
-    def next_stix_package(self):
-        package = None
-        while self.index < len(self.files):
-            file_ = self.files[self.index]
+    def add_packages(self, files):
+        for file_ in files:
             package = StixPackageContainer.from_file(file_)
-            self.index += 1
-            if package is not None:
-                package.source_metadata['filename'] = os.path.basename(file_)
-                break
-            else:
+            if package is None:
                 self._logger.info(
                     "skipping file '%s' - invalid XML/STIX" % file_
                 )
-        return package
+                continue
+
+            package.source_metadata['filename'] = os.path.basename(file_)
+            self.packages.append(package)

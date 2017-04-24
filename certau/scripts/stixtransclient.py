@@ -4,12 +4,14 @@ into the Bro Intelligence Format. It can interact with a TAXII server to obtain
 the STIX package(s), or a STIX package file can be supplied.
 """
 
-import sys,os
+import os
+import sys
 import logging
 import pkg_resources
 import pickle
+import configargparse
+import dateutil
 from urlparse import urlparse, urlunparse
-import configargparse, dateutil
 
 from certau.lib.taxii import SimpleTaxiiClient
 from certau.source import FileSource, TaxiiPollResponseSource
@@ -79,47 +81,38 @@ def get_arg_parser():
 
     # Output (transform) options
     output_group = parser.add_argument_group('output (transform) options')
-    output_ex_group = output_group.add_mutually_exclusive_group(required=True)
-    
 
-    #output_group.add_argument(
-    output_ex_group.add_argument(
+    output_group.add_argument(
         "-s", "--stats",
         action="store_true",
         help="display summary statistics for each STIX package",
     )
-    #output_group.add_argument(
-    output_ex_group.add_argument(
+    output_group.add_argument(
         "-t", "--text",
         action="store_true",
         help="output observables in delimited text",
     )
-    #output_group.add_argument(
-    output_ex_group.add_argument(
+    output_group.add_argument(
         "-b", "--bro",
         action="store_true",
         help="output observables in Bro intel framework format",
     )
-    #output_group.add_argument(
-    output_ex_group.add_argument(
+    output_group.add_argument(
         "-m", "--misp",
         action="store_true",
         help="send output to a MISP server",
     )
-    #output_group.add_argument(
-    output_ex_group.add_argument(
+    output_group.add_argument(
         "--snort",
         action="store_true",
         help="output observables in Snort rule format",
     )
-    #output_group.add_argument(
-    output_ex_group.add_argument(
+    output_group.add_argument(
         "-x", "--xml-output",
         help=("output XML STIX packages (one per file) to the given directory "
               "(use with --taxii)"),
     )
-
-    output_ex_group.add_argument(
+    output_group.add_argument(
         "-e", "--elasticsearch",
         action="store_true",
         help=("send indicators to an elasticsearch instance")
@@ -313,13 +306,11 @@ def get_arg_parser():
         help="set MISP published state to True",
     )
 
-
-
     # options for the elasticsearch transform
     es_group = parser.add_argument_group(
         title='elasticsearch output arguments (use with --elasticsearch)',
     )
-   
+
     es_group.add_argument(
         "--es-hostname",
         default='127.0.0.1',
@@ -345,7 +336,6 @@ def get_taxii_poll_state(filename, poll_url, collection):
                 if collection in poll_state[poll_url]:
                     return poll_state[poll_url][collection]
     return None
-
 
 
 def set_taxii_poll_state(filename, poll_url, collection, timestamp):
@@ -423,8 +413,6 @@ def main():
             snort_rule_action=options.snort_rule_action,
         ))
 
-
-
     if options.elasticsearch:
         transforms.append(ElasticsearchTransform(
             elasticsearchURL=options.es_hostname,
@@ -452,54 +440,8 @@ def main():
             ca_file=options.ca_file,
         )
 
-        if options.poll_url is not None:
-            parsed_url = urlparse(options.poll_url)
-            options.hostname = parsed_url.hostname
-            options.path = parsed_url.path
-            options.port = parsed_url.port
-            options.ssl = (parsed_url.scheme == 'https')
-        else:
-            scheme = 'https' if options.ssl else 'http'
-            netloc = options.hostname
-            if options.port:
-                netloc += ':{}'.format(options.port)
-            options.poll_url = urlunparse([
-                scheme, netloc, options.path, '', '', '',
-            ])
-        if options.state_file and not options.begin_timestamp:
-            options.begin_timestamp = get_taxii_poll_state(
-                filename=options.state_file,
-                poll_url=options.poll_url,
-                collection=options.collection,
-            )        
-
-
-
-                
-
-
-        # Parse begin and end timestamp datetime strings if provided
-        if options.begin_timestamp:
-            begin_timestamp = dateutil.parser.parse(options.begin_timestamp)
-        else:
-            begin_timestamp = None
-
-        if options.end_timestamp:
-            end_timestamp = dateutil.parser.parse(options.end_timestamp)
-        else:
-            end_timestamp = None
-
-
-        # Create the poll request message
-        poll_request = taxii_client.create_poll_request(
-            collection=options.collection,
-            subscription_id=options.subscription_id,
-            begin_timestamp=begin_timestamp,
-            end_timestamp=end_timestamp,
-        )
-
         # Build the poll URL if it wasn't provided
-        if not options.poll_url:
+        if options.poll_url is None:
             scheme = 'https' if options.ssl else 'http'
             netloc = options.hostname
             if options.port:
@@ -509,11 +451,36 @@ def main():
         else:
             poll_url = options.poll_url
 
+        # Use state file to grab begin_timestamp if possible
+        if options.state_file and not options.begin_timestamp:
+            options.begin_timestamp = get_taxii_poll_state(
+                filename=options.state_file,
+                poll_url=poll_url,
+                collection=options.collection,
+            )
+        elif options.begin_timestamp:
+            begin_timestamp = dateutil.parser.parse(options.begin_timestamp)
+        else:
+            begin_timestamp = None
+
+        if options.end_timestamp:
+            end_timestamp = dateutil.parser.parse(options.end_timestamp)
+        else:
+            end_timestamp = None
+
+        # Create the poll request message
+        poll_request = taxii_client.create_poll_request(
+            collection=options.collection,
+            subscription_id=options.subscription_id,
+            begin_timestamp=begin_timestamp,
+            end_timestamp=end_timestamp,
+        )
+
         # Send the poll request
         poll_response = taxii_client.send_poll_request(poll_request, poll_url)
         source = TaxiiPollResponseSource(poll_response, poll_url)
 
-        #source.send_poll_request()
+        # Update the timestamp for the latest poll
         if options.state_file:
             set_taxii_poll_state(
                 filename=options.state_file,
@@ -525,9 +492,7 @@ def main():
         # Process the output
         if options.xml_output:
             logger.debug("Writing XML to %s", options.xml_output)
-            source.save_content_blocks(options.xml_output)
-            #SimpleTaxiiClient.save_content_blocks(poll_response,
-            #                                      options.xml_output)
+            taxii_client.save_content_blocks(poll_response, options.xml_output)
 
         logger.info("Processing TAXII content blocks")
     else:
