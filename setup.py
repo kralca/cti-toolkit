@@ -46,5 +46,6 @@ setup(
         'mixbox',
         'pymisp',
         'requests',
+        'elasticsearch',
     ]
 )
